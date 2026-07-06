@@ -69,4 +69,4 @@ Get-ChildItem D:\standard-node-link-postgis\data -Depth 4
 | `ops` | `pipeline_run`, `notification_log` | 없음 |
 
 생성 후 다시 `audit-db`를 실행했으며 기존 표준 링크·노드·멀티링크 건수와 geometry 계약은
-변하지 않았다. 실제 보호구역 API 수집은 아직 실행하지 않았다.
+변하지 않았다. 이후 종로구 1개 시군구 E2E 결과는 `e2e_test_20260706.md`에 별도로 기록했다.

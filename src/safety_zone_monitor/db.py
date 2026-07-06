@@ -246,7 +246,8 @@ class Repository:
                         "INSERT INTO analysis.zone_snapshot "
                         "(run_id, zone_id, attr_hash, geom_hash, data_hash, attrs, geom) "
                         "VALUES (%s, %s, %s, %s, %s, %s::jsonb, "
-                        "ST_Multi(ST_Transform(ST_GeomFromText(%s, 5181), 5179))::"
+                        "ST_Multi(ST_CollectionExtract(ST_MakeValid(ST_Transform("
+                        "ST_GeomFromText(%s, 5181), 5179)), 3))::"
                         "geometry(MultiPolygon, 5179))",
                         [
                             (
@@ -306,8 +307,8 @@ class Repository:
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s,
-                    ST_Multi(ST_Transform(ST_GeomFromText(%s, 5181), 5179))::
-                        geometry(MultiPolygon, 5179),
+                    ST_Multi(ST_CollectionExtract(ST_MakeValid(ST_Transform(
+                        ST_GeomFromText(%s, 5181), 5179)), 3))::geometry(MultiPolygon, 5179),
                     %s::jsonb, %s
                 )
                 ON CONFLICT (zone_id) DO UPDATE SET

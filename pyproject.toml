@@ -31,8 +31,7 @@ safety_zone_monitor = ["migrations/*.sql"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
-cache_dir = ".test_cache"
+addopts = "-q -p no:cacheprovider"
 
 [tool.ruff]
 line-length = 100
