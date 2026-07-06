@@ -21,6 +21,7 @@ jobs:
       OPEN_API_SERVICE_KEY: ${{ secrets.OPEN_API_SERVICE_KEY }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       SGG_CODES: ${{ vars.SGG_CODES }}
+      SGG_CODES_FILE: ${{ vars.SGG_CODES_FILE }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -35,4 +36,5 @@ jobs:
         run: python -m safety_zone_monitor audit-db
       - name: Run daily monitor
         run: python -m safety_zone_monitor run
-
+      - name: Verify safety-zone data quality
+        run: python -m safety_zone_monitor quality-report

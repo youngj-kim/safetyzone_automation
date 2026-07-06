@@ -64,13 +64,10 @@ def main() -> None:
         print("Monitoring schemas are ready in the existing mobility_db.")
         return
     if args.command == "quality-report":
-        print(
-            json.dumps(
-                repository.quality_report(settings.sgg_codes),
-                ensure_ascii=False,
-                indent=2,
-            )
-        )
+        report = repository.quality_report(settings.sgg_codes)
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        if report["status"] != "PASS":
+            raise SystemExit(1)
         return
 
     summary = run_pipeline(settings)

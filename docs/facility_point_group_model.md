@@ -45,7 +45,7 @@ Point 전용 9건은 삭제 대상이 아니다. 예를 들어 `서울농학교`
 | `MISSING` | 이번 수집 범위에서 사라지거나 비활성화 |
 
 `UNCHANGED`는 이벤트 행을 만들지 않고 `ops.pipeline_run.point_unchanged_count`에만
-집계한다. Point 이벤트 알림 연결은 다음 단계에서 별도로 적용한다.
+집계한다. Polygon 또는 Point 중 하나라도 변경되면 통합 알림 대상이 된다.
 
 ### `analysis.v_zone_group_current`
 
