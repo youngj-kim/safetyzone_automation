@@ -70,10 +70,12 @@ def run_pipeline(settings: Settings) -> RunSummary:
         telegram_bot_token=settings.telegram_bot_token,
         telegram_chat_id=settings.telegram_chat_id,
     )
-    if summary.diff.has_changes:
+    if summary.has_changes:
         if notifier.configured:
             payload = {
                 "change_count": summary.change_count,
+                "polygon_change_count": len(summary.diff.changes),
+                "point_change_count": summary.point_change_count,
                 "run_id": str(summary.run_id),
             }
             try:

@@ -35,11 +35,15 @@ class RunSummary:
 
     @property
     def change_count(self) -> int:
-        return len(self.diff.changes)
+        return len(self.diff.changes) + len(self.point_diff.changes)
 
     @property
     def point_change_count(self) -> int:
         return len(self.point_diff.changes)
+
+    @property
+    def has_changes(self) -> bool:
+        return self.diff.has_changes or self.point_diff.has_changes
 
 
 class Repository:

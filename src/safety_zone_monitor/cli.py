@@ -6,7 +6,7 @@ import logging
 
 from safety_zone_monitor.config import Settings
 from safety_zone_monitor.db import Repository
-from safety_zone_monitor.diff import ChangeType
+from safety_zone_monitor.diff import ChangeType, PointChangeType
 from safety_zone_monitor.pipeline import run_pipeline
 
 
@@ -58,5 +58,12 @@ def main() -> None:
         f"GEOMETRY_ATTRIBUTE_CHANGED="
         f"{summary.diff.count(ChangeType.GEOMETRY_ATTRIBUTE_CHANGED)} "
         f"UNCHANGED={summary.diff.count(ChangeType.UNCHANGED)} "
-        f"DELETED={summary.diff.count(ChangeType.DELETED)}"
+        f"DELETED={summary.diff.count(ChangeType.DELETED)} | "
+        f"POINT_NEW={summary.point_diff.count(PointChangeType.NEW)} "
+        f"POINT_CHANGED={summary.point_diff.count(PointChangeType.POINT_CHANGED)} "
+        f"POINT_ATTRIBUTE_CHANGED={summary.point_diff.count(PointChangeType.ATTRIBUTE_CHANGED)} "
+        f"POINT_BOTH_CHANGED="
+        f"{summary.point_diff.count(PointChangeType.POINT_ATTRIBUTE_CHANGED)} "
+        f"POINT_UNCHANGED={summary.point_diff.count(PointChangeType.UNCHANGED)} "
+        f"POINT_MISSING={summary.point_diff.count(PointChangeType.MISSING)}"
     )
