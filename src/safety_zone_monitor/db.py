@@ -9,7 +9,7 @@ from typing import Any
 import psycopg
 
 from safety_zone_monitor.diff import ChangeType, DiffResult, ExistingZone, detect_changes
-from safety_zone_monitor.normalize import ZoneRecord, clean_text, stable_hash
+from safety_zone_monitor.normalize import FacilityPointRecord, ZoneRecord, clean_text, stable_hash
 
 
 @dataclass(frozen=True)
@@ -17,6 +17,8 @@ class RunSummary:
     run_id: uuid.UUID
     fetched_count: int
     polygon_count: int
+    facility_point_count: int
+    point_only_record_count: int
     skipped_non_polygon_count: int
     skipped_inactive_count: int
     diff: DiffResult
@@ -169,6 +171,7 @@ class Repository:
     def _record_values(record: ZoneRecord, run_id: uuid.UUID) -> tuple[object, ...]:
         return (
             record.zone_id,
+            record.zone_group_id,
             record.attr_hash,
             record.geom_hash,
             record.data_hash,
@@ -196,6 +199,26 @@ class Repository:
         )
 
     @staticmethod
+    def _point_values(
+        record: FacilityPointRecord, run_id: uuid.UUID
+    ) -> tuple[object, ...]:
+        return (
+            record.facility_id,
+            record.point_ordinal,
+            record.zone_group_id,
+            record.attr_hash,
+            record.point_hash,
+            record.data_hash,
+            record.source_manage_no,
+            record.facility_name,
+            record.sgg_code,
+            record.use_yn,
+            record.geometry_wkt,
+            json.dumps(record.attrs, ensure_ascii=False),
+            run_id,
+        )
+
+    @staticmethod
     def _raw_values(
         run_id: uuid.UUID, item_ordinal: int, item: dict[str, Any]
     ) -> tuple[object, ...]:
@@ -216,10 +239,14 @@ class Repository:
         sgg_codes: tuple[str, ...],
         raw_items: list[dict[str, Any]],
         records: list[ZoneRecord],
+        facility_points: list[FacilityPointRecord],
         skipped_non_polygon_count: int,
         skipped_inactive_count: int,
+        point_only_record_count: int,
     ) -> RunSummary:
-        incoming_sgg_codes = {record.sgg_code for record in records}
+        incoming_sgg_codes = {record.sgg_code for record in records} | {
+            record.sgg_code for record in facility_points
+        }
         if not incoming_sgg_codes.issubset(set(sgg_codes)):
             raise ValueError("API returned a record outside the configured SGG scope")
 
@@ -245,9 +272,9 @@ class Repository:
                 with connection.cursor() as cursor:
                     cursor.executemany(
                         "INSERT INTO analysis.zone_snapshot "
-                        "(run_id, zone_id, attr_hash, geom_hash, data_hash, attrs, "
+                        "(run_id, zone_id, zone_group_id, attr_hash, geom_hash, data_hash, attrs, "
                         "geometry_qc, geom) "
-                        "VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, "
+                        "VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, "
                         "ST_Multi(ST_CollectionExtract(ST_MakeValid(ST_Transform("
                         "ST_UnaryUnion(ST_CollectionExtract("
                         "ST_GeomFromText(%s, 5181), 3)), 5179)), 3))::"
@@ -256,6 +283,7 @@ class Repository:
                             (
                                 run_id,
                                 record.zone_id,
+                                record.zone_group_id,
                                 record.attr_hash,
                                 record.geom_hash,
                                 record.data_hash,
@@ -264,6 +292,36 @@ class Repository:
                                 record.geometry_wkt,
                             )
                             for record in records
+                        ],
+                    )
+
+            if facility_points:
+                with connection.cursor() as cursor:
+                    cursor.executemany(
+                        "INSERT INTO analysis.zone_facility_point_snapshot "
+                        "(run_id, facility_id, point_ordinal, zone_group_id, attr_hash, "
+                        "point_hash, data_hash, source_manage_no, facility_name, sgg_code, "
+                        "use_yn, geom, attrs) VALUES "
+                        "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
+                        "ST_Transform(ST_GeomFromText(%s, 5181), 5179)::geometry(Point, 5179), "
+                        "%s::jsonb)",
+                        [
+                            (
+                                run_id,
+                                point.facility_id,
+                                point.point_ordinal,
+                                point.zone_group_id,
+                                point.attr_hash,
+                                point.point_hash,
+                                point.data_hash,
+                                point.source_manage_no,
+                                point.facility_name,
+                                point.sgg_code,
+                                point.use_yn,
+                                point.geometry_wkt,
+                                json.dumps(point.attrs, ensure_ascii=False),
+                            )
+                            for point in facility_points
                         ],
                     )
 
@@ -302,7 +360,8 @@ class Repository:
 
             upsert_sql = """
                 INSERT INTO analysis.zone_current (
-                    zone_id, attr_hash, geom_hash, data_hash, source_manage_no, project_no,
+                    zone_id, zone_group_id, attr_hash, geom_hash, data_hash,
+                    source_manage_no, project_no,
                     facility_name, facility_type_code, facility_detail_type_code,
                     representative_manage_no, use_yn, sgg_code, emdong_code, stdg_code,
                     assign_type, road_address, road_detail_address, lot_address,
@@ -310,13 +369,14 @@ class Repository:
                     geometry_qc, last_run_id
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s,
                     ST_Multi(ST_CollectionExtract(ST_MakeValid(ST_Transform(ST_UnaryUnion(
                         ST_CollectionExtract(ST_GeomFromText(%s, 5181), 3)
                     ), 5179)), 3))::geometry(MultiPolygon, 5179),
                     %s::jsonb, %s::jsonb, %s
                 )
                 ON CONFLICT (zone_id) DO UPDATE SET
+                    zone_group_id = EXCLUDED.zone_group_id,
                     attr_hash = EXCLUDED.attr_hash,
                     geom_hash = EXCLUDED.geom_hash,
                     data_hash = EXCLUDED.data_hash,
@@ -354,6 +414,63 @@ class Repository:
                         [self._record_values(record, run_id) for record in records],
                     )
 
+            point_upsert_sql = """
+                INSERT INTO analysis.zone_facility_point_current (
+                    facility_id, point_ordinal, zone_group_id, attr_hash, point_hash,
+                    data_hash, source_manage_no, facility_name, sgg_code, use_yn,
+                    geom, attrs, last_run_id
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    ST_Transform(ST_GeomFromText(%s, 5181), 5179)::geometry(Point, 5179),
+                    %s::jsonb, %s
+                )
+                ON CONFLICT (facility_id, point_ordinal) DO UPDATE SET
+                    zone_group_id = EXCLUDED.zone_group_id,
+                    attr_hash = EXCLUDED.attr_hash,
+                    point_hash = EXCLUDED.point_hash,
+                    data_hash = EXCLUDED.data_hash,
+                    source_manage_no = EXCLUDED.source_manage_no,
+                    facility_name = EXCLUDED.facility_name,
+                    sgg_code = EXCLUDED.sgg_code,
+                    use_yn = EXCLUDED.use_yn,
+                    geom = EXCLUDED.geom,
+                    attrs = EXCLUDED.attrs,
+                    last_seen_at = now(),
+                    updated_at = CASE
+                        WHEN analysis.zone_facility_point_current.data_hash
+                            <> EXCLUDED.data_hash THEN now()
+                        ELSE analysis.zone_facility_point_current.updated_at
+                    END,
+                    last_run_id = EXCLUDED.last_run_id
+            """
+            if facility_points:
+                with connection.cursor() as cursor:
+                    cursor.executemany(
+                        point_upsert_sql,
+                        [self._point_values(point, run_id) for point in facility_points],
+                    )
+
+            current_point_keys = {
+                (str(row[0]).strip(), row[1])
+                for row in connection.execute(
+                    "SELECT facility_id, point_ordinal "
+                    "FROM analysis.zone_facility_point_current "
+                    "WHERE sgg_code = ANY(%s)",
+                    (list(sgg_codes),),
+                ).fetchall()
+            }
+            incoming_point_keys = {
+                (point.facility_id, point.point_ordinal) for point in facility_points
+            }
+            stale_point_keys = current_point_keys - incoming_point_keys
+            if stale_point_keys:
+                with connection.cursor() as cursor:
+                    cursor.executemany(
+                        "DELETE FROM analysis.zone_facility_point_current "
+                        "WHERE facility_id = %s AND point_ordinal = %s",
+                        list(stale_point_keys),
+                    )
+
             deleted_ids = [
                 change.zone_id
                 for change in diff.changes
@@ -368,6 +485,8 @@ class Repository:
             metrics = (
                 len(raw_items),
                 len(records),
+                len(facility_points),
+                point_only_record_count,
                 skipped_non_polygon_count,
                 skipped_inactive_count,
                 diff.count(ChangeType.NEW),
@@ -382,7 +501,8 @@ class Repository:
                 """
                 UPDATE ops.pipeline_run SET
                     status = 'SUCCESS', finished_at = now(), fetched_count = %s,
-                    polygon_count = %s, skipped_non_polygon_count = %s,
+                    polygon_count = %s, facility_point_count = %s,
+                    point_only_record_count = %s, skipped_non_polygon_count = %s,
                     skipped_inactive_count = %s,
                     new_count = %s, geometry_changed_count = %s,
                     attribute_changed_count = %s, geometry_attribute_changed_count = %s,
@@ -401,6 +521,8 @@ class Repository:
             run_id=run_id,
             fetched_count=len(raw_items),
             polygon_count=len(records),
+            facility_point_count=len(facility_points),
+            point_only_record_count=point_only_record_count,
             skipped_non_polygon_count=skipped_non_polygon_count,
             skipped_inactive_count=skipped_inactive_count,
             diff=diff,

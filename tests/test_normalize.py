@@ -1,6 +1,7 @@
 from safety_zone_monitor.normalize import (
     canonical_polygon_wkt,
     normalize_item,
+    normalize_point_geometries,
     normalize_polygon_geometry,
     normalize_records,
 )
@@ -57,18 +58,23 @@ def test_zone_id_survives_district_code_change() -> None:
     assert first.geom_hash == moved.geom_hash
 
 
-def test_point_is_skipped() -> None:
-    records, skipped, inactive = normalize_records([sample_item(fturGeomVl="POINT (1 2)")])
-    assert records == []
-    assert skipped == 1
-    assert inactive == 0
+def test_point_only_facility_is_stored_and_linked_to_group() -> None:
+    result = normalize_records([sample_item(fturGeomVl="MULTIPOINT ((1 2), (3 4))")])
+    assert result.zones == []
+    assert len(result.facility_points) == 2
+    assert {point.zone_group_id for point in result.facility_points} == {"R-1"}
+    assert [point.point_ordinal for point in result.facility_points] == [1, 2]
+    assert result.point_only_record_count == 1
+    assert result.skipped_non_polygon_count == 0
+    assert result.skipped_inactive_count == 0
 
 
 def test_inactive_record_is_kept_out_of_analysis() -> None:
-    records, skipped, inactive = normalize_records([sample_item(useYn="N")])
-    assert records == []
-    assert skipped == 0
-    assert inactive == 1
+    result = normalize_records([sample_item(useYn="N")])
+    assert result.zones == []
+    assert result.facility_points == []
+    assert result.skipped_non_polygon_count == 0
+    assert result.skipped_inactive_count == 1
 
 
 def test_geometry_collection_keeps_only_polygon() -> None:
@@ -77,6 +83,21 @@ def test_geometry_collection_keeps_only_polygon() -> None:
     )
     assert wkt is not None
     assert wkt.startswith("MULTIPOLYGON")
+
+
+def test_geometry_collection_splits_point_without_losing_polygon() -> None:
+    item = sample_item(
+        fturGeomVl=(
+            "GEOMETRYCOLLECTION (POINT (1 2), "
+            "POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0)))"
+        )
+    )
+    result = normalize_records([item])
+    assert len(result.zones) == 1
+    assert len(result.facility_points) == 1
+    assert result.zones[0].zone_group_id == "R-1"
+    assert result.facility_points[0].facility_id == result.zones[0].zone_id
+    assert normalize_point_geometries(item["fturGeomVl"]) == ["POINT (1 2)"]
 
 
 def test_overlapping_polygons_are_dissolved_without_area_loss() -> None:

@@ -44,7 +44,7 @@ def run_pipeline(settings: Settings) -> RunSummary:
             delay_seconds=settings.request_delay_seconds,
         )
         raw_items = client.fetch_all(settings.sgg_codes)
-        records, skipped_non_polygon, skipped_inactive = normalize_records(raw_items)
+        normalized = normalize_records(raw_items)
 
         # A zero-record response is treated as an upstream/configuration failure, never as a
         # legitimate nationwide deletion.
@@ -55,9 +55,11 @@ def run_pipeline(settings: Settings) -> RunSummary:
             run_id=run_id,
             sgg_codes=settings.sgg_codes,
             raw_items=raw_items,
-            records=records,
-            skipped_non_polygon_count=skipped_non_polygon,
-            skipped_inactive_count=skipped_inactive,
+            records=normalized.zones,
+            facility_points=normalized.facility_points,
+            skipped_non_polygon_count=normalized.skipped_non_polygon_count,
+            skipped_inactive_count=normalized.skipped_inactive_count,
+            point_only_record_count=normalized.point_only_record_count,
         )
     except Exception as exc:
         repository.mark_failed(run_id, exc)
