@@ -15,6 +15,10 @@ jobs:
     # mobility_db is localhost:5433, so this must run on the Windows host that owns it.
     runs-on: [self-hosted, windows, x64]
     timeout-minutes: 30
+    defaults:
+      run:
+        # Avoid host PowerShell execution-policy blocking generated setup.ps1 files.
+        shell: cmd
     permissions:
       contents: read
     env:
