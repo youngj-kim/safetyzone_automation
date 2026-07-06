@@ -1,0 +1,19 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+.coverage
+htmlcov/
+.docx_review/
+.docker-tmp/
+.gitrepo/
+safety_zone_data/
+
+# The supplied reference files contain an API key and must not be committed.
+경찰청_보호구역현황_OPEN_API_추출절차.docx
+[[]20251223[]] 경찰청_전국보호구역 API 활용리뷰 .pptx

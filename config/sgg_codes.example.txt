@@ -1,0 +1,5 @@
+# One 5-digit district code per line. This is only a small local smoke-test sample.
+11110
+11140
+11170
+
