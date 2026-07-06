@@ -29,13 +29,15 @@ geometry 변경을 감지하는 Python MVP입니다. 기존 표준노드링크 P
 
 - `zone_id`: 경찰청 `ptznMngNo` 기반 SHA-256. 누락 시 시설·주소 안정 필드로 대체
 - `attr_hash`: geometry를 제외한 정규화 속성 hash
-- `geom_hash`: 방향과 시작점을 정규화한 Polygon/MultiPolygon hash
+- `geom_hash`: 중첩 Polygon을 `UnaryUnion`으로 합친 정규 geometry hash
 - `data_hash`: `attr_hash + geom_hash`
 - 변경 유형: `NEW`, `ATTRIBUTE_CHANGED`, `GEOMETRY_CHANGED`,
   `GEOMETRY_ATTRIBUTE_CHANGED`, `UNCHANGED`, `DELETED`
 
 Point 단독 레코드는 원본 스냅샷에는 보존하지만 `analysis` geometry에서는 제외합니다. API 원본
 EPSG:5181 geometry는 PostGIS 적재 시 `ST_Transform(..., 5179)`로 변환합니다.
+GeometryCollection 안의 중첩 Polygon은 합집합으로 해소하며 보정 근거는 `geometry_qc`에
+저장합니다.
 
 ## 최초 설정
 

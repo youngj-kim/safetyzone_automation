@@ -1,4 +1,9 @@
-from safety_zone_monitor.normalize import canonical_polygon_wkt, normalize_item, normalize_records
+from safety_zone_monitor.normalize import (
+    canonical_polygon_wkt,
+    normalize_item,
+    normalize_polygon_geometry,
+    normalize_records,
+)
 
 
 def sample_item(**updates: str) -> dict[str, str]:
@@ -72,3 +77,21 @@ def test_geometry_collection_keeps_only_polygon() -> None:
     )
     assert wkt is not None
     assert wkt.startswith("MULTIPOLYGON")
+
+
+def test_overlapping_polygons_are_dissolved_without_area_loss() -> None:
+    result = normalize_polygon_geometry(
+        "GEOMETRYCOLLECTION ("
+        "POLYGON ((0 0, 0 10, 10 10, 10 0, 0 0)), "
+        "POLYGON ((5 0, 5 10, 15 10, 15 0, 5 0)), "
+        "POINT (2 2))"
+    )
+    assert result is not None
+    _, qc = result
+    assert qc["source_polygon_count"] == 2
+    assert qc["source_point_count"] == 1
+    assert qc["normalized_polygon_count"] == 1
+    assert qc["source_polygon_area_sum_m2"] == 200.0
+    assert qc["source_union_area_m2"] == 150.0
+    assert qc["source_overlap_area_m2"] == 50.0
+    assert qc["repair_applied"] is True

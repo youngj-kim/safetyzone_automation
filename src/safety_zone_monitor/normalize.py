@@ -11,6 +11,7 @@ from typing import Any
 from shapely import from_wkt, make_valid, to_wkt
 from shapely.geometry import MultiPolygon, Polygon
 from shapely.geometry.base import BaseGeometry
+from shapely.ops import unary_union
 
 
 def clean_text(value: Any) -> str | None:
@@ -60,7 +61,17 @@ def _polygon_parts(geometry: BaseGeometry) -> list[Polygon]:
     return []
 
 
-def canonical_polygon_wkt(value: Any) -> str | None:
+def _point_count(geometry: BaseGeometry) -> int:
+    if geometry.geom_type == "Point":
+        return 1
+    if geometry.geom_type == "MultiPoint":
+        return len(geometry.geoms)
+    if hasattr(geometry, "geoms"):
+        return sum(_point_count(child) for child in geometry.geoms)
+    return 0
+
+
+def normalize_polygon_geometry(value: Any) -> tuple[str, dict[str, Any]] | None:
     text = clean_text(value)
     if not text:
         return None
@@ -68,13 +79,58 @@ def canonical_polygon_wkt(value: Any) -> str | None:
         geometry = from_wkt(text)
     except Exception as exc:
         raise ValueError("Invalid WKT geometry") from exc
-    if not geometry.is_valid:
-        geometry = make_valid(geometry)
-    polygons = _polygon_parts(geometry)
-    if not polygons:
+    source_polygons = _polygon_parts(geometry)
+    if not source_polygons:
         return None
-    normalized = MultiPolygon(polygons).normalize()
-    return to_wkt(normalized, rounding_precision=-1, trim=True, output_dimension=2)
+
+    cleaned_polygons: list[Polygon] = []
+    had_invalid_component = False
+    for polygon in source_polygons:
+        candidate: BaseGeometry = polygon
+        if not candidate.is_valid:
+            had_invalid_component = True
+            candidate = make_valid(candidate)
+        cleaned_polygons.extend(_polygon_parts(candidate))
+    if not cleaned_polygons:
+        return None
+
+    source_area_sum = sum(polygon.area for polygon in cleaned_polygons)
+    dissolved = unary_union(cleaned_polygons)
+    if not dissolved.is_valid:
+        dissolved = make_valid(dissolved)
+    dissolved_polygons = _polygon_parts(dissolved)
+    if not dissolved_polygons:
+        return None
+    normalized = MultiPolygon(dissolved_polygons).normalize()
+    if normalized.is_empty or not normalized.is_valid:
+        raise ValueError("Polygon normalization did not produce a valid geometry")
+
+    union_area = normalized.area
+    overlap_area = max(source_area_sum - union_area, 0.0)
+    qc = {
+        "normalization_version": "polygon-union-v1",
+        "source_geometry_type": geometry.geom_type,
+        "source_geometry_valid": geometry.is_valid,
+        "source_polygon_count": len(source_polygons),
+        "source_point_count": _point_count(geometry),
+        "normalized_polygon_count": len(dissolved_polygons),
+        "source_polygon_area_sum_m2": round(source_area_sum, 3),
+        "source_union_area_m2": round(union_area, 3),
+        "source_overlap_area_m2": round(overlap_area, 3),
+        "source_overlap_ratio": round(overlap_area / source_area_sum, 6)
+        if source_area_sum
+        else 0.0,
+        "repair_applied": had_invalid_component or overlap_area > 0.001,
+        "non_polygon_component_discarded": _point_count(geometry) > 0,
+        "qc_status": "PASS",
+    }
+    wkt = to_wkt(normalized, rounding_precision=-1, trim=True, output_dimension=2)
+    return wkt, qc
+
+
+def canonical_polygon_wkt(value: Any) -> str | None:
+    result = normalize_polygon_geometry(value)
+    return result[0] if result else None
 
 
 @dataclass(frozen=True)
@@ -101,6 +157,7 @@ class ZoneRecord:
     first_registered_on: date | None
     last_modified_on: date | None
     geometry_wkt: str
+    geometry_qc: dict[str, Any]
 
     def attributes(self) -> dict[str, Any]:
         return {
@@ -138,9 +195,10 @@ class ZoneRecord:
 
 
 def normalize_item(item: dict[str, Any]) -> ZoneRecord | None:
-    geometry_wkt = canonical_polygon_wkt(item.get("fturGeomVl"))
-    if geometry_wkt is None:
+    geometry_result = normalize_polygon_geometry(item.get("fturGeomVl"))
+    if geometry_result is None:
         return None
+    geometry_wkt, geometry_qc = geometry_result
 
     attributes = {
         "source_manage_no": clean_text(item.get("ptznMngNo")),
@@ -199,6 +257,7 @@ def normalize_item(item: dict[str, Any]) -> ZoneRecord | None:
         geom_hash=geom_hash,
         data_hash=data_hash,
         geometry_wkt=geometry_wkt,
+        geometry_qc=geometry_qc,
         **attributes,  # type: ignore[arg-type]
     )
 

@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS analysis.zone_snapshot (
     geom_hash char(64) NOT NULL,
     data_hash char(64) NOT NULL,
     attrs jsonb NOT NULL,
+    geometry_qc jsonb NOT NULL,
     geom geometry(MultiPolygon, 5179) NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (run_id, zone_id)
@@ -93,6 +94,7 @@ CREATE TABLE IF NOT EXISTS analysis.zone_current (
     last_modified_on date,
     geom geometry(MultiPolygon, 5179) NOT NULL,
     attrs jsonb NOT NULL,
+    geometry_qc jsonb NOT NULL,
     first_seen_at timestamptz NOT NULL DEFAULT now(),
     last_seen_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
@@ -145,4 +147,3 @@ CREATE TABLE IF NOT EXISTS ops.notification_log (
     payload_summary jsonb,
     error_message text
 );
-

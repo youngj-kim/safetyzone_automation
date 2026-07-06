@@ -191,6 +191,7 @@ class Repository:
             record.last_modified_on,
             record.geometry_wkt,
             json.dumps(record.attributes(), ensure_ascii=False),
+            json.dumps(record.geometry_qc, ensure_ascii=False),
             run_id,
         )
 
@@ -244,10 +245,12 @@ class Repository:
                 with connection.cursor() as cursor:
                     cursor.executemany(
                         "INSERT INTO analysis.zone_snapshot "
-                        "(run_id, zone_id, attr_hash, geom_hash, data_hash, attrs, geom) "
-                        "VALUES (%s, %s, %s, %s, %s, %s::jsonb, "
+                        "(run_id, zone_id, attr_hash, geom_hash, data_hash, attrs, "
+                        "geometry_qc, geom) "
+                        "VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, "
                         "ST_Multi(ST_CollectionExtract(ST_MakeValid(ST_Transform("
-                        "ST_GeomFromText(%s, 5181), 5179)), 3))::"
+                        "ST_UnaryUnion(ST_CollectionExtract("
+                        "ST_GeomFromText(%s, 5181), 3)), 5179)), 3))::"
                         "geometry(MultiPolygon, 5179))",
                         [
                             (
@@ -257,6 +260,7 @@ class Repository:
                                 record.geom_hash,
                                 record.data_hash,
                                 json.dumps(record.attributes(), ensure_ascii=False),
+                                json.dumps(record.geometry_qc, ensure_ascii=False),
                                 record.geometry_wkt,
                             )
                             for record in records
@@ -303,13 +307,14 @@ class Repository:
                     representative_manage_no, use_yn, sgg_code, emdong_code, stdg_code,
                     assign_type, road_address, road_detail_address, lot_address,
                     lot_detail_address, first_registered_on, last_modified_on, geom, attrs,
-                    last_run_id
+                    geometry_qc, last_run_id
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s,
-                    ST_Multi(ST_CollectionExtract(ST_MakeValid(ST_Transform(
-                        ST_GeomFromText(%s, 5181), 5179)), 3))::geometry(MultiPolygon, 5179),
-                    %s::jsonb, %s
+                    ST_Multi(ST_CollectionExtract(ST_MakeValid(ST_Transform(ST_UnaryUnion(
+                        ST_CollectionExtract(ST_GeomFromText(%s, 5181), 3)
+                    ), 5179)), 3))::geometry(MultiPolygon, 5179),
+                    %s::jsonb, %s::jsonb, %s
                 )
                 ON CONFLICT (zone_id) DO UPDATE SET
                     attr_hash = EXCLUDED.attr_hash,
@@ -334,6 +339,7 @@ class Repository:
                     last_modified_on = EXCLUDED.last_modified_on,
                     geom = EXCLUDED.geom,
                     attrs = EXCLUDED.attrs,
+                    geometry_qc = EXCLUDED.geometry_qc,
                     last_seen_at = now(),
                     updated_at = CASE
                         WHEN analysis.zone_current.data_hash <> EXCLUDED.data_hash THEN now()
