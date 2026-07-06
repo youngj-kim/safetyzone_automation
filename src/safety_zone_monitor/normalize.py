@@ -4,7 +4,7 @@ import hashlib
 import json
 import re
 import unicodedata
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
 
@@ -25,12 +25,26 @@ def parse_date(value: Any) -> date | None:
     text = clean_text(value)
     if not text:
         return None
+    if re.fullmatch(r"\d{8,14}", text):
+        text = text[:8]
+    elif re.match(r"^\d{4}-\d{2}-\d{2}[ T]", text):
+        text = text[:10]
     for fmt in ("%Y%m%d", "%Y-%m-%d", "%Y.%m.%d"):
         try:
             return datetime.strptime(text, fmt).date()
         except ValueError:
             pass
     raise ValueError(f"Unsupported date value: {text}")
+
+
+def stable_hash(payload: Any) -> str:
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _polygon_parts(geometry: BaseGeometry) -> list[Polygon]:
@@ -65,7 +79,9 @@ def canonical_polygon_wkt(value: Any) -> str | None:
 
 @dataclass(frozen=True)
 class ZoneRecord:
-    zone_key: str
+    zone_id: str
+    attr_hash: str
+    geom_hash: str
     data_hash: str
     source_manage_no: str | None
     project_no: str | None
@@ -83,24 +99,42 @@ class ZoneRecord:
     lot_address: str | None
     lot_detail_address: str | None
     first_registered_on: date | None
+    last_modified_on: date | None
     geometry_wkt: str
 
+    def attributes(self) -> dict[str, Any]:
+        return {
+            "source_manage_no": self.source_manage_no,
+            "project_no": self.project_no,
+            "facility_name": self.facility_name,
+            "facility_type_code": self.facility_type_code,
+            "facility_detail_type_code": self.facility_detail_type_code,
+            "representative_manage_no": self.representative_manage_no,
+            "use_yn": self.use_yn,
+            "sgg_code": self.sgg_code,
+            "emdong_code": self.emdong_code,
+            "stdg_code": self.stdg_code,
+            "assign_type": self.assign_type,
+            "road_address": self.road_address,
+            "road_detail_address": self.road_detail_address,
+            "lot_address": self.lot_address,
+            "lot_detail_address": self.lot_detail_address,
+            "first_registered_on": (
+                self.first_registered_on.isoformat() if self.first_registered_on else None
+            ),
+            "last_modified_on": (
+                self.last_modified_on.isoformat() if self.last_modified_on else None
+            ),
+        }
+
     def snapshot(self) -> dict[str, Any]:
-        result = asdict(self)
-        result["first_registered_on"] = (
-            self.first_registered_on.isoformat() if self.first_registered_on else None
-        )
-        return result
-
-
-def _sha256(payload: Any) -> str:
-    encoded = json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+        return {
+            "zone_id": self.zone_id,
+            "attr_hash": self.attr_hash,
+            "geom_hash": self.geom_hash,
+            "data_hash": self.data_hash,
+            **self.attributes(),
+        }
 
 
 def normalize_item(item: dict[str, Any]) -> ZoneRecord | None:
@@ -108,7 +142,7 @@ def normalize_item(item: dict[str, Any]) -> ZoneRecord | None:
     if geometry_wkt is None:
         return None
 
-    fields = {
+    attributes = {
         "source_manage_no": clean_text(item.get("ptznMngNo")),
         "project_no": clean_text(item.get("pjtNo")),
         "facility_name": clean_text(item.get("trgtFcltNm")),
@@ -125,47 +159,64 @@ def normalize_item(item: dict[str, Any]) -> ZoneRecord | None:
         "lot_address": clean_text(item.get("lotnoAddr")),
         "lot_detail_address": clean_text(item.get("lotnoDaddr")),
         "first_registered_on": parse_date(item.get("frstRegDt")),
-        "geometry_wkt": geometry_wkt,
+        "last_modified_on": parse_date(item.get("lastMdfcnDt")),
     }
-    if not fields["sgg_code"]:
+    if not attributes["sgg_code"]:
         raise ValueError("Record is missing required sggCd")
 
-    if fields["source_manage_no"]:
+    if attributes["source_manage_no"]:
         identity = {
             "source": "police-safety-zone-v1",
-            "source_manage_no": fields["source_manage_no"],
+            "source_manage_no": attributes["source_manage_no"],
         }
     else:
         identity = {
             "source": "police-safety-zone-v1-fallback",
-            "sgg_code": fields["sgg_code"],
-            "representative_manage_no": fields["representative_manage_no"],
-            "facility_name": fields["facility_name"],
-            "facility_type_code": fields["facility_type_code"],
-            "road_address": fields["road_address"],
-            "lot_address": fields["lot_address"],
+            "sgg_code": attributes["sgg_code"],
+            "representative_manage_no": attributes["representative_manage_no"],
+            "facility_name": attributes["facility_name"],
+            "facility_type_code": attributes["facility_type_code"],
+            "road_address": attributes["road_address"],
+            "lot_address": attributes["lot_address"],
             "first_registered_on": (
-                fields["first_registered_on"].isoformat() if fields["first_registered_on"] else None
+                attributes["first_registered_on"].isoformat()
+                if attributes["first_registered_on"]
+                else None
             ),
         }
-    zone_key = _sha256(identity)
-    hash_payload = dict(fields)
-    if hash_payload["first_registered_on"]:
-        hash_payload["first_registered_on"] = hash_payload["first_registered_on"].isoformat()
-    data_hash = _sha256(hash_payload)
-    return ZoneRecord(zone_key=zone_key, data_hash=data_hash, **fields)  # type: ignore[arg-type]
+
+    hashable_attributes = dict(attributes)
+    for field in ("first_registered_on", "last_modified_on"):
+        if hashable_attributes[field]:
+            hashable_attributes[field] = hashable_attributes[field].isoformat()
+    zone_id = stable_hash(identity)
+    attr_hash = stable_hash(hashable_attributes)
+    geom_hash = stable_hash(geometry_wkt)
+    data_hash = stable_hash({"attr_hash": attr_hash, "geom_hash": geom_hash})
+    return ZoneRecord(
+        zone_id=zone_id,
+        attr_hash=attr_hash,
+        geom_hash=geom_hash,
+        data_hash=data_hash,
+        geometry_wkt=geometry_wkt,
+        **attributes,  # type: ignore[arg-type]
+    )
 
 
-def normalize_records(items: list[dict[str, Any]]) -> tuple[list[ZoneRecord], int]:
-    records_by_key: dict[str, ZoneRecord] = {}
+def normalize_records(items: list[dict[str, Any]]) -> tuple[list[ZoneRecord], int, int]:
+    records_by_id: dict[str, ZoneRecord] = {}
     skipped_non_polygon = 0
+    skipped_inactive = 0
     for item in items:
         record = normalize_item(item)
         if record is None:
             skipped_non_polygon += 1
             continue
-        previous = records_by_key.get(record.zone_key)
+        if record.use_yn and record.use_yn.upper() not in {"Y", "1"}:
+            skipped_inactive += 1
+            continue
+        previous = records_by_id.get(record.zone_id)
         if previous and previous.data_hash != record.data_hash:
-            raise ValueError(f"Conflicting duplicate zone_key: {record.zone_key}")
-        records_by_key[record.zone_key] = record
-    return list(records_by_key.values()), skipped_non_polygon
+            raise ValueError(f"Conflicting duplicate zone_id: {record.zone_id}")
+        records_by_id[record.zone_id] = record
+    return list(records_by_id.values()), skipped_non_polygon, skipped_inactive

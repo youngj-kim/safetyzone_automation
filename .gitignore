@@ -3,6 +3,7 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.test_cache/
 .ruff_cache/
 *.egg-info/
 dist/
@@ -10,6 +11,7 @@ build/
 .coverage
 htmlcov/
 .docx_review/
+.handover_review/
 .docker-tmp/
 .gitrepo/
 safety_zone_data/

@@ -54,17 +54,17 @@ class Settings:
     log_level: str = "INFO"
 
     @classmethod
-    def from_env(cls) -> Settings:
+    def from_env(cls, *, require_pipeline: bool = True) -> Settings:
         load_dotenv()
         service_key = os.getenv("OPEN_API_SERVICE_KEY", "").strip()
         database_url = os.getenv("DATABASE_URL", "").strip()
         sgg_codes = _read_sgg_codes()
         missing = []
-        if not service_key:
+        if require_pipeline and not service_key:
             missing.append("OPEN_API_SERVICE_KEY")
         if not database_url:
             missing.append("DATABASE_URL")
-        if not sgg_codes:
+        if require_pipeline and not sgg_codes:
             missing.append("SGG_CODES or SGG_CODES_FILE")
         if missing:
             raise ValueError(f"Missing required configuration: {', '.join(missing)}")

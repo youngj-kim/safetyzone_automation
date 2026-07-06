@@ -11,10 +11,30 @@ from safety_zone_monitor.notify import Notifier
 logger = logging.getLogger(__name__)
 
 
+def _verify_mobility_contract(repository: Repository) -> None:
+    audit = repository.audit_host_contract()
+    missing = [name for name, exists in audit["required_objects"].items() if not exists]
+    if missing:
+        raise RuntimeError(
+            "The existing mobility_db is missing required object(s): " + ", ".join(missing)
+        )
+    std_link_geometry = next(
+        (
+            item
+            for item in audit["geometry"]
+            if item["schema"] == "mobility" and item["table"] == "std_link"
+        ),
+        None,
+    )
+    if not std_link_geometry or std_link_geometry["srid"] != 5179:
+        raise RuntimeError("mobility.std_link must exist with SRID 5179")
+
+
 def run_pipeline(settings: Settings) -> RunSummary:
     repository = Repository(settings.database_url)
+    _verify_mobility_contract(repository)
     repository.migrate()
-    run_id = repository.create_run(settings.sgg_codes)
+    run_id = repository.create_run(settings.sgg_codes, settings.api_url)
     try:
         client = SafetyZoneApiClient(
             base_url=settings.api_url,
@@ -24,19 +44,20 @@ def run_pipeline(settings: Settings) -> RunSummary:
             delay_seconds=settings.request_delay_seconds,
         )
         raw_items = client.fetch_all(settings.sgg_codes)
-        records, skipped = normalize_records(raw_items)
+        records, skipped_non_polygon, skipped_inactive = normalize_records(raw_items)
 
-        # A completely empty response is more likely an upstream/configuration failure than a
-        # legitimate nationwide deletion. Refuse to create mass MISSING events in that case.
+        # A zero-record response is treated as an upstream/configuration failure, never as a
+        # legitimate nationwide deletion.
         if not raw_items:
             raise RuntimeError("Open API returned zero records for all configured districts")
 
         summary = repository.apply_run(
             run_id=run_id,
             sgg_codes=settings.sgg_codes,
+            raw_items=raw_items,
             records=records,
-            fetched_count=len(raw_items),
-            skipped_non_polygon_count=skipped,
+            skipped_non_polygon_count=skipped_non_polygon,
+            skipped_inactive_count=skipped_inactive,
         )
     except Exception as exc:
         repository.mark_failed(run_id, exc)
@@ -48,8 +69,27 @@ def run_pipeline(settings: Settings) -> RunSummary:
         telegram_chat_id=settings.telegram_chat_id,
     )
     if summary.diff.has_changes:
-        if notifier.configured and notifier.send(summary):
-            repository.mark_notification_sent(run_id)
-        elif not notifier.configured:
+        if notifier.configured:
+            payload = {
+                "change_count": summary.change_count,
+                "run_id": str(summary.run_id),
+            }
+            try:
+                sent_channels = notifier.send(summary)
+                for channel in sent_channels:
+                    repository.record_notification(run_id, channel, "SENT", payload)
+                if sent_channels:
+                    repository.mark_notification_sent(run_id)
+            except Exception as exc:
+                for channel in notifier.channels:
+                    repository.record_notification(
+                        run_id,
+                        channel,
+                        "FAILED",
+                        payload,
+                        f"{type(exc).__name__}: {exc}"[:4000],
+                    )
+                raise
+        else:
             logger.warning("Changes were found, but no notification channel is configured")
     return summary

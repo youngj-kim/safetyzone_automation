@@ -12,7 +12,8 @@ concurrency:
 
 jobs:
   monitor:
-    runs-on: ubuntu-latest
+    # mobility_db is localhost:5433, so this must run on the Windows host that owns it.
+    runs-on: [self-hosted, windows, x64]
     timeout-minutes: 30
     permissions:
       contents: read
@@ -30,5 +31,8 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: python -m pip install .
-      - run: safety-zone-monitor run
+      - name: Verify existing mobility database
+        run: python -m safety_zone_monitor audit-db
+      - name: Run daily monitor
+        run: python -m safety_zone_monitor run
 
