@@ -12,7 +12,7 @@
 - 매일 09:00에 PC가 켜져 있음
 - GitHub Actions Runner 서비스가 실행 중
 - Docker Desktop과 `mobility_postgis` 컨테이너가 실행 중
-- Python 설치는 워크플로의 `setup-python` 단계가 처리
+- Python 3.11 이상이 self-hosted PC의 PATH에 등록되어 있음
 
 ## GitHub 저장소 설정
 
@@ -44,7 +44,7 @@ SGG_CODES_FILE=config/sgg_codes_nationwide.txt
 ## 실행 순서
 
 1. 저장소 체크아웃
-2. Python 3.12 준비 및 패키지 설치
+2. self-hosted PC의 Python 버전 확인 및 패키지 설치
 3. 기존 `mobility_db`와 표준노드링크 객체 확인
 4. 보호구역 수집·정규화·변경감지·저장·알림
 5. 중복·도형·시군구 범위 품질검사

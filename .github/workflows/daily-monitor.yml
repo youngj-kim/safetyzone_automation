@@ -31,10 +31,8 @@ jobs:
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
+      - name: Verify host Python
+        run: python --version
       - run: python -m pip install .
       - name: Verify existing mobility database
         run: python -m safety_zone_monitor audit-db
