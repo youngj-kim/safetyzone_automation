@@ -13,6 +13,7 @@ htmlcov/
 .docx_review/
 .handover_review/
 .docker-tmp/
+.actions-runner/
 .gitrepo/
 safety_zone_data/
 
