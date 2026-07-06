@@ -8,7 +8,16 @@ from typing import Any
 
 import psycopg
 
-from safety_zone_monitor.diff import ChangeType, DiffResult, ExistingZone, detect_changes
+from safety_zone_monitor.diff import (
+    ChangeType,
+    DiffResult,
+    ExistingFacilityPoint,
+    ExistingZone,
+    PointChangeType,
+    PointDiffResult,
+    detect_changes,
+    detect_point_changes,
+)
 from safety_zone_monitor.normalize import FacilityPointRecord, ZoneRecord, clean_text, stable_hash
 
 
@@ -22,10 +31,15 @@ class RunSummary:
     skipped_non_polygon_count: int
     skipped_inactive_count: int
     diff: DiffResult
+    point_diff: PointDiffResult
 
     @property
     def change_count(self) -> int:
         return len(self.diff.changes)
+
+    @property
+    def point_change_count(self) -> int:
+        return len(self.point_diff.changes)
 
 
 class Repository:
@@ -166,6 +180,41 @@ class Repository:
             )
             for row in rows
         }
+
+    def _load_current_points(
+        self,
+        connection: psycopg.Connection,
+        sgg_codes: tuple[str, ...],
+    ) -> dict[tuple[str, int], ExistingFacilityPoint]:
+        rows = connection.execute(
+            "SELECT facility_id, point_ordinal, zone_group_id, attr_hash, point_hash, "
+            "data_hash, attrs FROM analysis.zone_facility_point_current "
+            "WHERE sgg_code = ANY(%s)",
+            (list(sgg_codes),),
+        ).fetchall()
+        result = {}
+        for row in rows:
+            facility_id = str(row[0]).strip()
+            point_ordinal = row[1]
+            snapshot = {
+                "facility_id": facility_id,
+                "point_ordinal": point_ordinal,
+                "zone_group_id": row[2],
+                "attr_hash": str(row[3]).strip(),
+                "point_hash": str(row[4]).strip(),
+                "data_hash": str(row[5]).strip(),
+                **row[6],
+            }
+            existing = ExistingFacilityPoint(
+                facility_id=facility_id,
+                point_ordinal=point_ordinal,
+                attr_hash=str(row[3]).strip(),
+                point_hash=str(row[4]).strip(),
+                data_hash=str(row[5]).strip(),
+                snapshot=snapshot,
+            )
+            result[existing.key] = existing
+        return result
 
     @staticmethod
     def _record_values(record: ZoneRecord, run_id: uuid.UUID) -> tuple[object, ...]:
@@ -327,6 +376,8 @@ class Repository:
 
             current = self._load_current(connection, sgg_codes)
             diff = detect_changes(records, current)
+            current_points = self._load_current_points(connection, sgg_codes)
+            point_diff = detect_point_changes(facility_points, current_points)
             event_rows = [
                 (
                     run_id,
@@ -356,6 +407,40 @@ class Repository:
                         "old_snapshot, new_snapshot) VALUES "
                         "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb)",
                         event_rows,
+                    )
+
+            point_event_rows = [
+                (
+                    run_id,
+                    change.facility_id,
+                    change.point_ordinal,
+                    change.zone_group_id,
+                    change.change_type.value,
+                    change.old_attr_hash,
+                    change.new_attr_hash,
+                    change.old_point_hash,
+                    change.new_point_hash,
+                    change.old_data_hash,
+                    change.new_data_hash,
+                    json.dumps(change.old_snapshot, ensure_ascii=False)
+                    if change.old_snapshot is not None
+                    else None,
+                    json.dumps(change.new_snapshot, ensure_ascii=False)
+                    if change.new_snapshot is not None
+                    else None,
+                )
+                for change in point_diff.changes
+            ]
+            if point_event_rows:
+                with connection.cursor() as cursor:
+                    cursor.executemany(
+                        "INSERT INTO analysis.zone_facility_point_change_event "
+                        "(run_id, facility_id, point_ordinal, zone_group_id, change_type, "
+                        "old_attr_hash, new_attr_hash, old_point_hash, new_point_hash, "
+                        "old_data_hash, new_data_hash, old_snapshot, new_snapshot) VALUES "
+                        "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
+                        "%s::jsonb, %s::jsonb)",
+                        point_event_rows,
                     )
 
             upsert_sql = """
@@ -450,25 +535,17 @@ class Repository:
                         [self._point_values(point, run_id) for point in facility_points],
                     )
 
-            current_point_keys = {
-                (str(row[0]).strip(), row[1])
-                for row in connection.execute(
-                    "SELECT facility_id, point_ordinal "
-                    "FROM analysis.zone_facility_point_current "
-                    "WHERE sgg_code = ANY(%s)",
-                    (list(sgg_codes),),
-                ).fetchall()
-            }
-            incoming_point_keys = {
-                (point.facility_id, point.point_ordinal) for point in facility_points
-            }
-            stale_point_keys = current_point_keys - incoming_point_keys
-            if stale_point_keys:
+            missing_point_keys = [
+                (change.facility_id, change.point_ordinal)
+                for change in point_diff.changes
+                if change.change_type is PointChangeType.MISSING
+            ]
+            if missing_point_keys:
                 with connection.cursor() as cursor:
                     cursor.executemany(
                         "DELETE FROM analysis.zone_facility_point_current "
                         "WHERE facility_id = %s AND point_ordinal = %s",
-                        list(stale_point_keys),
+                        missing_point_keys,
                     )
 
             deleted_ids = [
@@ -495,6 +572,17 @@ class Repository:
                 diff.count(ChangeType.GEOMETRY_ATTRIBUTE_CHANGED),
                 diff.count(ChangeType.UNCHANGED),
                 diff.count(ChangeType.DELETED),
+                point_diff.count(PointChangeType.NEW),
+                sum(
+                    point_diff.count(change_type)
+                    for change_type in (
+                        PointChangeType.POINT_CHANGED,
+                        PointChangeType.ATTRIBUTE_CHANGED,
+                        PointChangeType.POINT_ATTRIBUTE_CHANGED,
+                    )
+                ),
+                point_diff.count(PointChangeType.UNCHANGED),
+                point_diff.count(PointChangeType.MISSING),
                 run_id,
             )
             connection.execute(
@@ -506,7 +594,9 @@ class Repository:
                     skipped_inactive_count = %s,
                     new_count = %s, geometry_changed_count = %s,
                     attribute_changed_count = %s, geometry_attribute_changed_count = %s,
-                    unchanged_count = %s, deleted_count = %s
+                    unchanged_count = %s, deleted_count = %s,
+                    point_new_count = %s, point_changed_count = %s,
+                    point_unchanged_count = %s, point_missing_count = %s
                 WHERE pipeline_run_id = %s
                 """,
                 metrics,
@@ -526,6 +616,7 @@ class Repository:
             skipped_non_polygon_count=skipped_non_polygon_count,
             skipped_inactive_count=skipped_inactive_count,
             diff=diff,
+            point_diff=point_diff,
         )
 
     def record_notification(

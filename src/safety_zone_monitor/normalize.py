@@ -239,6 +239,17 @@ class FacilityPointRecord:
     geometry_wkt: str
     attrs: dict[str, Any]
 
+    def snapshot(self) -> dict[str, Any]:
+        return {
+            "facility_id": self.facility_id,
+            "point_ordinal": self.point_ordinal,
+            "zone_group_id": self.zone_group_id,
+            "attr_hash": self.attr_hash,
+            "point_hash": self.point_hash,
+            "data_hash": self.data_hash,
+            **self.attrs,
+        }
+
 
 @dataclass(frozen=True)
 class NormalizationResult:

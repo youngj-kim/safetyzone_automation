@@ -32,6 +32,21 @@ Point 전용 9건은 삭제 대상이 아니다. 예를 들어 `서울농학교`
 
 과거 실행 결과는 `analysis.zone_facility_point_snapshot`에 실행별로 누적된다.
 
+### `analysis.zone_facility_point_change_event`
+
+시설 Point의 현재 상태를 직전 실행과 비교해 실제 변경만 저장한다.
+
+| 변경 유형 | 의미 |
+|---|---|
+| `NEW` | 처음 확인된 시설 Point |
+| `POINT_CHANGED` | 시설 위치만 변경 |
+| `ATTRIBUTE_CHANGED` | 시설명·주소·그룹 등 속성만 변경 |
+| `POINT_ATTRIBUTE_CHANGED` | 위치와 속성이 함께 변경 |
+| `MISSING` | 이번 수집 범위에서 사라지거나 비활성화 |
+
+`UNCHANGED`는 이벤트 행을 만들지 않고 `ops.pipeline_run.point_unchanged_count`에만
+집계한다. Point 이벤트 알림 연결은 다음 단계에서 별도로 적용한다.
+
 ### `analysis.v_zone_group_current`
 
 - `zone_group_id`별 Polygon과 시설 Point를 묶은 조회용 뷰
