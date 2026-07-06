@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections import Counter
 
 from safety_zone_monitor.api import SafetyZoneApiClient
 from safety_zone_monitor.config import Settings
@@ -9,6 +10,22 @@ from safety_zone_monitor.normalize import normalize_records
 from safety_zone_monitor.notify import Notifier
 
 logger = logging.getLogger(__name__)
+
+
+def _validate_response_coverage(
+    raw_items: list[dict[str, object]], sgg_codes: tuple[str, ...]
+) -> None:
+    if not raw_items:
+        raise RuntimeError("Open API returned zero records for all configured districts")
+    response_counts = Counter(
+        str(item.get("sggCd", "")).strip() for item in raw_items
+    )
+    empty_districts = [code for code in sgg_codes if response_counts.get(code, 0) == 0]
+    if empty_districts:
+        raise RuntimeError(
+            "Open API returned zero records for configured district(s); "
+            "current rows were not changed: " + ", ".join(empty_districts)
+        )
 
 
 def _verify_mobility_contract(repository: Repository) -> None:
@@ -46,10 +63,8 @@ def run_pipeline(settings: Settings) -> RunSummary:
         raw_items = client.fetch_all(settings.sgg_codes)
         normalized = normalize_records(raw_items)
 
-        # A zero-record response is treated as an upstream/configuration failure, never as a
-        # legitimate nationwide deletion.
-        if not raw_items:
-            raise RuntimeError("Open API returned zero records for all configured districts")
+        # Never interpret an empty district response as a legitimate mass deletion.
+        _validate_response_coverage(raw_items, settings.sgg_codes)
 
         summary = repository.apply_run(
             run_id=run_id,

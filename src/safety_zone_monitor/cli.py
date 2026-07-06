@@ -8,6 +8,7 @@ from safety_zone_monitor.config import Settings
 from safety_zone_monitor.db import Repository
 from safety_zone_monitor.diff import ChangeType, PointChangeType
 from safety_zone_monitor.pipeline import run_pipeline
+from safety_zone_monitor.sgg_codes import write_sgg_codes
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -20,11 +21,25 @@ def _parser() -> argparse.ArgumentParser:
         "init-db", help="Add raw/analysis/ops monitoring objects to the existing mobility_db"
     )
     subparsers.add_parser("run", help="Fetch, normalize, compare, store, and notify")
+    subparsers.add_parser(
+        "quality-report", help="Read-only quality checks for current safety-zone data"
+    )
+    build_codes = subparsers.add_parser(
+        "build-sgg-codes", help="Build current SGG list from the official legal-code CSV"
+    )
+    build_codes.add_argument("--source", required=True, help="Official legal-code CSV path")
+    build_codes.add_argument(
+        "--output", default="config/sgg_codes_nationwide.txt", help="Output text path"
+    )
     return parser
 
 
 def main() -> None:
     args = _parser().parse_args()
+    if args.command == "build-sgg-codes":
+        codes = write_sgg_codes(args.source, args.output)
+        print(f"Wrote {len(codes)} current SGG codes to {args.output}.")
+        return
     settings = Settings.from_env(require_pipeline=args.command == "run")
     logging.basicConfig(
         level=getattr(logging, settings.log_level, logging.INFO),
@@ -47,6 +62,15 @@ def main() -> None:
             raise RuntimeError("Required mobility objects are missing: " + ", ".join(missing))
         repository.migrate()
         print("Monitoring schemas are ready in the existing mobility_db.")
+        return
+    if args.command == "quality-report":
+        print(
+            json.dumps(
+                repository.quality_report(settings.sgg_codes),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
         return
 
     summary = run_pipeline(settings)

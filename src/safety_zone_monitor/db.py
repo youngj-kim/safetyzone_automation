@@ -126,6 +126,83 @@ class Repository:
             "exact_rows": counts,
         }
 
+    def quality_report(self, expected_sgg_codes: tuple[str, ...] = ()) -> dict[str, Any]:
+        """Read-only checks for identity, coverage, group linkage, and geometry quality."""
+        with self._connect() as connection:
+            connection.execute("SET TRANSACTION READ ONLY")
+            latest = connection.execute(
+                "SELECT pipeline_run_id, finished_at, monitored_sgg_codes "
+                "FROM ops.pipeline_run WHERE status = 'SUCCESS' "
+                "ORDER BY finished_at DESC LIMIT 1"
+            ).fetchone()
+            current_counts = {
+                "polygons": connection.execute(
+                    "SELECT COUNT(*) FROM analysis.zone_current"
+                ).fetchone()[0],
+                "facility_points": connection.execute(
+                    "SELECT COUNT(*) FROM analysis.zone_facility_point_current"
+                ).fetchone()[0],
+                "zone_groups": connection.execute(
+                    "SELECT COUNT(*) FROM analysis.v_zone_group_current"
+                ).fetchone()[0],
+            }
+            current_sgg_codes = tuple(
+                row[0]
+                for row in connection.execute(
+                    "SELECT DISTINCT sgg_code FROM ("
+                    "SELECT sgg_code FROM analysis.zone_current UNION ALL "
+                    "SELECT sgg_code FROM analysis.zone_facility_point_current"
+                    ") AS scope ORDER BY sgg_code"
+                ).fetchall()
+            )
+            duplicate_zone_manage_nos = connection.execute(
+                "SELECT COUNT(*) FROM (SELECT source_manage_no "
+                "FROM analysis.zone_current WHERE source_manage_no IS NOT NULL "
+                "GROUP BY source_manage_no HAVING COUNT(*) > 1) AS duplicates"
+            ).fetchone()[0]
+            duplicate_point_manage_nos = connection.execute(
+                "SELECT COUNT(*) FROM (SELECT source_manage_no "
+                "FROM analysis.zone_facility_point_current "
+                "WHERE source_manage_no IS NOT NULL GROUP BY source_manage_no "
+                "HAVING COUNT(DISTINCT facility_id) > 1) AS duplicates"
+            ).fetchone()[0]
+            orphan_point_groups = connection.execute(
+                "SELECT COUNT(*) FROM analysis.v_zone_group_current "
+                "WHERE polygon_record_count = 0 AND facility_count > 0"
+            ).fetchone()[0]
+            invalid_polygons = connection.execute(
+                "SELECT COUNT(*) FROM analysis.zone_current "
+                "WHERE ST_IsEmpty(geom) OR NOT ST_IsValid(geom) OR ST_SRID(geom) <> 5179"
+            ).fetchone()[0]
+            invalid_points = connection.execute(
+                "SELECT COUNT(*) FROM analysis.zone_facility_point_current "
+                "WHERE ST_IsEmpty(geom) OR NOT ST_IsValid(geom) OR ST_SRID(geom) <> 5179"
+            ).fetchone()[0]
+            missing_sgg_codes = sorted(set(expected_sgg_codes) - set(current_sgg_codes))
+            connection.rollback()
+
+        critical_counts = {
+            "duplicate_zone_manage_nos": duplicate_zone_manage_nos,
+            "duplicate_point_manage_nos": duplicate_point_manage_nos,
+            "invalid_polygons": invalid_polygons,
+            "invalid_points": invalid_points,
+            "missing_expected_sgg_codes": len(missing_sgg_codes),
+        }
+        return {
+            "status": "PASS" if not any(critical_counts.values()) else "FAIL",
+            "latest_successful_run": {
+                "run_id": str(latest[0]) if latest else None,
+                "finished_at": latest[1].isoformat() if latest else None,
+                "monitored_sgg_codes": latest[2] if latest else [],
+            },
+            "current_counts": current_counts,
+            "current_sgg_count": len(current_sgg_codes),
+            "current_sgg_codes": current_sgg_codes,
+            "critical_checks": critical_counts,
+            "missing_expected_sgg_codes": missing_sgg_codes,
+            "warnings": {"point_groups_without_polygon": orphan_point_groups},
+        }
+
     def create_run(self, sgg_codes: tuple[str, ...], source_endpoint: str) -> uuid.UUID:
         run_id = uuid.uuid4()
         with self._connect() as connection:
