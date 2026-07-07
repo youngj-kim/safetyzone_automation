@@ -1,0 +1,30 @@
+# Seoul 25 district SGG codes.
+# Use this file with SGG_CODES_FILE=config/sgg_codes.seoul.txt for local runs.
+# In GitHub Actions repository variables, you can either set:
+# - SGG_CODES to the comma-separated list below, or
+# - SGG_CODES_FILE to this file path after pushing it to the repository.
+11110
+11140
+11170
+11200
+11215
+11230
+11260
+11290
+11305
+11320
+11350
+11380
+11410
+11440
+11470
+11500
+11530
+11545
+11560
+11590
+11620
+11650
+11680
+11710
+11740
