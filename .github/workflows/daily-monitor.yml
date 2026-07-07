@@ -2,6 +2,11 @@ name: Daily safety-zone monitor
 
 on:
   workflow_dispatch:
+    inputs:
+      notification_test:
+        description: "Send a notification test message only; skip DB monitoring"
+        required: false
+        default: "false"
   schedule:
     # 09:00 KST every day (Korea has no daylight-saving time).
     - cron: "0 0 * * *"
@@ -34,9 +39,15 @@ jobs:
       - name: Verify host Python
         run: python --version
       - run: python -m pip install .
+      - name: Send notification test
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true' }}
+        run: python -m safety_zone_monitor test-notification
       - name: Verify existing mobility database
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true') }}
         run: python -m safety_zone_monitor audit-db
       - name: Run daily monitor
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true') }}
         run: python -m safety_zone_monitor run
       - name: Verify safety-zone data quality
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true') }}
         run: python -m safety_zone_monitor quality-report

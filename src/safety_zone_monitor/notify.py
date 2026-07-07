@@ -73,7 +73,9 @@ class Notifier:
     def send(self, summary: RunSummary) -> tuple[str, ...]:
         if not summary.has_changes:
             return ()
-        message = format_summary(summary)
+        return self.send_text(format_summary(summary))
+
+    def send_text(self, message: str) -> tuple[str, ...]:
         sent: list[str] = []
         if self.slack_webhook_url:
             response = requests.post(

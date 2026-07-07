@@ -7,6 +7,7 @@ import logging
 from safety_zone_monitor.config import Settings
 from safety_zone_monitor.db import Repository
 from safety_zone_monitor.diff import ChangeType, PointChangeType
+from safety_zone_monitor.notify import Notifier
 from safety_zone_monitor.pipeline import run_pipeline
 from safety_zone_monitor.sgg_codes import write_sgg_codes
 
@@ -23,6 +24,9 @@ def _parser() -> argparse.ArgumentParser:
     subparsers.add_parser("run", help="Fetch, normalize, compare, store, and notify")
     subparsers.add_parser(
         "quality-report", help="Read-only quality checks for current safety-zone data"
+    )
+    subparsers.add_parser(
+        "test-notification", help="Send a test Slack/Telegram message without touching DB data"
     )
     build_codes = subparsers.add_parser(
         "build-sgg-codes", help="Build current SGG list from the official legal-code CSV"
@@ -68,6 +72,22 @@ def main() -> None:
         print(json.dumps(report, ensure_ascii=False, indent=2))
         if report["status"] != "PASS":
             raise SystemExit(1)
+        return
+    if args.command == "test-notification":
+        notifier = Notifier(
+            slack_webhook_url=settings.slack_webhook_url,
+            telegram_bot_token=settings.telegram_bot_token,
+            telegram_chat_id=settings.telegram_chat_id,
+            timeout_seconds=settings.timeout_seconds,
+        )
+        if not notifier.configured:
+            raise RuntimeError("No notification channel is configured")
+        sent = notifier.send_text(
+            "[보호구역 모니터링 테스트]\n"
+            "Telegram/Slack 알림 연결이 정상입니다.\n"
+            "이 메시지는 운영 데이터를 변경하지 않는 테스트 발송입니다."
+        )
+        print("Notification test sent: " + ", ".join(sent))
         return
 
     summary = run_pipeline(settings)
