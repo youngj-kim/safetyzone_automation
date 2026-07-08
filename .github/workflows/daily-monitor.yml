@@ -8,8 +8,8 @@ on:
         required: false
         default: "false"
   schedule:
-    # 09:00 KST every day (Korea has no daylight-saving time).
-    - cron: "0 0 * * *"
+    # 10:00 KST temporary schedule test.
+    - cron: "0 1 * * *"
 
 concurrency:
   group: safety-zone-daily-monitor
