@@ -928,6 +928,13 @@ class Repository:
         strong_intersection_ratio: float = 0.2,
         weak_intersection_length_m: float = 10.0,
         weak_intersection_ratio: float = 0.1,
+        short_link_length_m: float = 20.0,
+        short_link_inside_ratio: float = 0.5,
+        near_parallel_length_m: float = 20.0,
+        near_parallel_ratio: float = 0.2,
+        tiny_adjacency_length_m: float = 10.0,
+        tiny_adjacency_ratio: float = 0.1,
+        junction_link_length_m: float = 35.0,
     ) -> dict[str, Any]:
         """Build second-round standard-link candidates with stricter review rules."""
         if not sgg_codes:
@@ -941,6 +948,13 @@ class Repository:
             "strong_intersection_ratio": strong_intersection_ratio,
             "weak_intersection_length_m": weak_intersection_length_m,
             "weak_intersection_ratio": weak_intersection_ratio,
+            "short_link_length_m": short_link_length_m,
+            "short_link_inside_ratio": short_link_inside_ratio,
+            "near_parallel_length_m": near_parallel_length_m,
+            "near_parallel_ratio": near_parallel_ratio,
+            "tiny_adjacency_length_m": tiny_adjacency_length_m,
+            "tiny_adjacency_ratio": tiny_adjacency_ratio,
+            "junction_link_length_m": junction_link_length_m,
         }
 
         with self._connect() as connection:
@@ -987,13 +1001,18 @@ class Repository:
                         z.sgg_code,
                         l.link_id,
                         l.road_name,
+                        l.road_rank,
+                        l.road_type,
                         l.road_no,
+                        l.connect,
+                        l.multi_link,
                         l.f_node_id,
                         l.t_node_id,
                         metrics.intersects,
                         metrics.distance_m,
                         metrics.link_length_m,
                         metrics.link_midpoint_inside_zone,
+                        metrics.proximity_overlap_length_m,
                         CASE
                             WHEN metrics.intersects THEN
                                 ST_Length(
@@ -1014,7 +1033,16 @@ class Repository:
                             COALESCE(NULLIF(l.length_m, 0), ST_Length(l.geom))
                                 AS link_length_m,
                             ST_Covers(z.geom, ST_Centroid(l.geom))
-                                AS link_midpoint_inside_zone
+                                AS link_midpoint_inside_zone,
+                            ST_Length(
+                                ST_CollectionExtract(
+                                    ST_Intersection(
+                                        ST_Buffer(z.geom, %(near_distance_m)s),
+                                        l.geom
+                                    ),
+                                    2
+                                )
+                            ) AS proximity_overlap_length_m
                     ) AS metrics
                 )
                 SELECT
@@ -1024,6 +1052,11 @@ class Repository:
                             THEN intersection_length_m / link_length_m
                         ELSE 0::double precision
                     END AS intersection_ratio,
+                    CASE
+                        WHEN link_length_m > 0
+                            THEN proximity_overlap_length_m / link_length_m
+                        ELSE 0::double precision
+                    END AS proximity_overlap_ratio,
                     (
                         intersects
                         AND (
@@ -1061,12 +1094,25 @@ class Repository:
                         WHEN intersection_length_m >= %(strong_intersection_length_m)s
                          AND intersection_ratio >= %(strong_intersection_ratio)s
                             THEN 'A'
+                        WHEN link_length_m < %(short_link_length_m)s
+                         AND intersection_ratio >= %(short_link_inside_ratio)s
+                         AND link_midpoint_inside_zone
+                            THEN 'A'
                         ELSE 'B'
                     END AS seed_grade
                 FROM tmp_zone_link_raw_v2
                 WHERE intersects
-                  AND intersection_length_m >= %(weak_intersection_length_m)s
-                  AND intersection_ratio >= %(weak_intersection_ratio)s
+                  AND (
+                    (
+                        intersection_length_m >= %(weak_intersection_length_m)s
+                        AND intersection_ratio >= %(weak_intersection_ratio)s
+                    )
+                    OR (
+                        link_length_m < %(short_link_length_m)s
+                        AND intersection_ratio >= %(short_link_inside_ratio)s
+                        AND link_midpoint_inside_zone
+                    )
+                  )
                 """,
                 params,
             )
@@ -1095,10 +1141,38 @@ class Repository:
                     seed.seed_link_id,
                     COALESCE(seed.same_road_as_seed, false) AS same_road_as_seed,
                     COALESCE(seed.connected_to_seed, false) AS connected_to_seed,
+                    (
+                        r.road_rank IN ('101', '102')
+                        AND r.intersects
+                        AND r.intersection_length_m >= %(weak_intersection_length_m)s
+                        AND r.intersection_ratio >= %(weak_intersection_ratio)s
+                    ) AS potential_grade_separated,
                     CASE
+                        WHEN r.road_rank IN ('101', '102')
+                         AND r.intersects
+                         AND r.intersection_length_m >= %(weak_intersection_length_m)s
+                         AND r.intersection_ratio >= %(weak_intersection_ratio)s
+                            THEN 'B'
                         WHEN r.intersects
                          AND r.intersection_length_m >= %(strong_intersection_length_m)s
                          AND r.intersection_ratio >= %(strong_intersection_ratio)s
+                            THEN 'A'
+                        WHEN r.intersects
+                         AND r.link_length_m < %(short_link_length_m)s
+                         AND r.intersection_ratio >= %(short_link_inside_ratio)s
+                         AND r.link_midpoint_inside_zone
+                            THEN 'A'
+                        WHEN r.distance_m <= %(near_distance_m)s
+                         AND r.proximity_overlap_length_m >= %(near_parallel_length_m)s
+                         AND r.proximity_overlap_ratio >= %(near_parallel_ratio)s
+                            THEN 'A'
+                        WHEN r.distance_m <= %(near_distance_m)s
+                         AND seed.seed_link_id IS NOT NULL
+                         AND seed.connected_to_seed
+                         AND (
+                            r.link_length_m <= %(junction_link_length_m)s
+                            OR r.proximity_overlap_ratio >= %(short_link_inside_ratio)s
+                         )
                             THEN 'A'
                         WHEN r.intersects
                          AND r.intersection_length_m >= %(weak_intersection_length_m)s
@@ -1106,6 +1180,10 @@ class Repository:
                             THEN 'B'
                         WHEN NOT r.intersects
                          AND r.distance_m <= %(near_distance_m)s
+                         AND NOT (
+                            r.proximity_overlap_length_m < %(tiny_adjacency_length_m)s
+                            AND r.proximity_overlap_ratio < %(tiny_adjacency_ratio)s
+                         )
                          AND seed.seed_link_id IS NOT NULL
                          AND (seed.same_road_as_seed OR seed.connected_to_seed)
                             THEN 'C'
@@ -1178,9 +1256,12 @@ class Repository:
                     intersection_length_m,
                     link_length_m,
                     intersection_ratio,
+                    proximity_overlap_length_m,
+                    proximity_overlap_ratio,
                     match_rule_code,
                     match_rule_description,
                     is_touch_or_graze,
+                    potential_grade_separated,
                     link_midpoint_inside_zone,
                     same_road_as_seed,
                     connected_to_seed,
@@ -1203,22 +1284,64 @@ class Repository:
                     intersection_length_m,
                     link_length_m,
                     intersection_ratio,
+                    proximity_overlap_length_m,
+                    proximity_overlap_ratio,
                     CASE candidate_grade
-                        WHEN 'A' THEN 'A_STRONG_OVERLAP'
-                        WHEN 'B' THEN 'B_WEAK_OVERLAP'
+                        WHEN 'A' THEN
+                            CASE
+                                WHEN intersects
+                                 AND intersection_length_m >= %(strong_intersection_length_m)s
+                                 AND intersection_ratio >= %(strong_intersection_ratio)s
+                                    THEN 'A_STRONG_OVERLAP'
+                                WHEN intersects
+                                 AND link_length_m < %(short_link_length_m)s
+                                 AND intersection_ratio >= %(short_link_inside_ratio)s
+                                 AND link_midpoint_inside_zone
+                                    THEN 'A_SHORT_INSIDE'
+                                WHEN distance_m <= %(near_distance_m)s
+                                 AND proximity_overlap_length_m >= %(near_parallel_length_m)s
+                                 AND proximity_overlap_ratio >= %(near_parallel_ratio)s
+                                    THEN 'A_NEAR_PARALLEL_CORRIDOR'
+                                ELSE 'A_JUNCTION_COMPONENT'
+                            END
+                        WHEN 'B' THEN
+                            CASE
+                                WHEN potential_grade_separated THEN 'B_POTENTIAL_GRADE_SEPARATED'
+                                ELSE 'B_WEAK_OVERLAP'
+                            END
                         WHEN 'C' THEN 'C_NEAR_CONNECTED_OR_SAME_ROAD'
                         ELSE 'D_EXTENDED_NODE_CONNECTED'
                     END AS match_rule_code,
                     CASE candidate_grade
-                        WHEN 'A'
-                            THEN 'direct overlap meeting both length and ratio thresholds'
-                        WHEN 'B'
-                            THEN 'direct overlap meeting weak length and ratio thresholds'
+                        WHEN 'A' THEN
+                            CASE
+                                WHEN intersects
+                                 AND intersection_length_m >= %(strong_intersection_length_m)s
+                                 AND intersection_ratio >= %(strong_intersection_ratio)s
+                                    THEN 'direct overlap meeting both length and ratio thresholds'
+                                WHEN intersects
+                                 AND link_length_m < %(short_link_length_m)s
+                                 AND intersection_ratio >= %(short_link_inside_ratio)s
+                                 AND link_midpoint_inside_zone
+                                    THEN 'short link mostly inside the protection-zone polygon'
+                                WHEN distance_m <= %(near_distance_m)s
+                                 AND proximity_overlap_length_m >= %(near_parallel_length_m)s
+                                 AND proximity_overlap_ratio >= %(near_parallel_ratio)s
+                                    THEN 'near parallel corridor inside the zone buffer'
+                                ELSE 'short or buffered junction link connected to a seed'
+                            END
+                        WHEN 'B' THEN
+                            CASE
+                                WHEN potential_grade_separated
+                                    THEN 'high-rank overlapping link kept for review due to possible grade separation'
+                                ELSE 'direct overlap meeting weak length and ratio thresholds'
+                            END
                         WHEN 'C'
                             THEN 'nearby non-intersecting link tied to an A/B seed'
                         ELSE 'extended nearby non-intersecting link node-connected to an A/B seed'
                     END AS match_rule_description,
                     is_touch_or_graze,
+                    potential_grade_separated,
                     link_midpoint_inside_zone,
                     CASE WHEN candidate_grade IN ('A', 'B') THEN false ELSE same_road_as_seed END,
                     CASE WHEN candidate_grade IN ('A', 'B') THEN false ELSE connected_to_seed END,
@@ -1237,9 +1360,12 @@ class Repository:
                     intersection_length_m = EXCLUDED.intersection_length_m,
                     link_length_m = EXCLUDED.link_length_m,
                     intersection_ratio = EXCLUDED.intersection_ratio,
+                    proximity_overlap_length_m = EXCLUDED.proximity_overlap_length_m,
+                    proximity_overlap_ratio = EXCLUDED.proximity_overlap_ratio,
                     match_rule_code = EXCLUDED.match_rule_code,
                     match_rule_description = EXCLUDED.match_rule_description,
                     is_touch_or_graze = EXCLUDED.is_touch_or_graze,
+                    potential_grade_separated = EXCLUDED.potential_grade_separated,
                     link_midpoint_inside_zone = EXCLUDED.link_midpoint_inside_zone,
                     same_road_as_seed = EXCLUDED.same_road_as_seed,
                     connected_to_seed = EXCLUDED.connected_to_seed,
@@ -1262,9 +1388,12 @@ class Repository:
                     intersection_length_m,
                     link_length_m,
                     intersection_ratio,
+                    proximity_overlap_length_m,
+                    proximity_overlap_ratio,
                     exclusion_code,
                     exclusion_reason,
                     is_touch_or_graze,
+                    potential_grade_separated,
                     link_midpoint_inside_zone,
                     created_run_id
                 )
@@ -1279,8 +1408,14 @@ class Repository:
                     intersection_length_m,
                     link_length_m,
                     intersection_ratio,
+                    proximity_overlap_length_m,
+                    proximity_overlap_ratio,
                     CASE
                         WHEN is_touch_or_graze THEN 'TOUCH_OR_GRAZE'
+                        WHEN distance_m <= %(near_distance_m)s
+                         AND proximity_overlap_length_m < %(tiny_adjacency_length_m)s
+                         AND proximity_overlap_ratio < %(tiny_adjacency_ratio)s
+                            THEN 'TINY_ADJACENCY'
                         WHEN NOT intersects AND seed_link_id IS NULL THEN 'NO_AB_SEED'
                         WHEN NOT intersects
                          AND distance_m <= %(near_distance_m)s
@@ -1295,6 +1430,10 @@ class Repository:
                     CASE
                         WHEN is_touch_or_graze
                             THEN 'link only touches or grazes the zone boundary'
+                        WHEN distance_m <= %(near_distance_m)s
+                         AND proximity_overlap_length_m < %(tiny_adjacency_length_m)s
+                         AND proximity_overlap_ratio < %(tiny_adjacency_ratio)s
+                            THEN 'nearby link has only tiny adjacency to the protection-zone buffer'
                         WHEN NOT intersects AND seed_link_id IS NULL
                             THEN 'no A/B seed exists in the same zone group'
                         WHEN NOT intersects
@@ -1308,6 +1447,7 @@ class Repository:
                         ELSE 'candidate did not satisfy second-round rules'
                     END AS exclusion_reason,
                     is_touch_or_graze,
+                    potential_grade_separated,
                     link_midpoint_inside_zone,
                     %(latest_run_id)s
                 FROM tmp_zone_link_evaluated_v2
@@ -1321,9 +1461,12 @@ class Repository:
                     intersection_length_m = EXCLUDED.intersection_length_m,
                     link_length_m = EXCLUDED.link_length_m,
                     intersection_ratio = EXCLUDED.intersection_ratio,
+                    proximity_overlap_length_m = EXCLUDED.proximity_overlap_length_m,
+                    proximity_overlap_ratio = EXCLUDED.proximity_overlap_ratio,
                     exclusion_code = EXCLUDED.exclusion_code,
                     exclusion_reason = EXCLUDED.exclusion_reason,
                     is_touch_or_graze = EXCLUDED.is_touch_or_graze,
+                    potential_grade_separated = EXCLUDED.potential_grade_separated,
                     link_midpoint_inside_zone = EXCLUDED.link_midpoint_inside_zone,
                     created_run_id = EXCLUDED.created_run_id,
                     updated_at = now()
@@ -1384,5 +1527,12 @@ class Repository:
                 "strong_intersection_ratio": strong_intersection_ratio,
                 "weak_intersection_length_m": weak_intersection_length_m,
                 "weak_intersection_ratio": weak_intersection_ratio,
+                "short_link_length_m": short_link_length_m,
+                "short_link_inside_ratio": short_link_inside_ratio,
+                "near_parallel_length_m": near_parallel_length_m,
+                "near_parallel_ratio": near_parallel_ratio,
+                "tiny_adjacency_length_m": tiny_adjacency_length_m,
+                "tiny_adjacency_ratio": tiny_adjacency_ratio,
+                "junction_link_length_m": junction_link_length_m,
             },
         }

@@ -42,3 +42,23 @@ def test_link_candidate_v2_builder_tracks_touch_or_graze_exclusions() -> None:
     assert "TOUCH_OR_GRAZE" in db
     assert "same_road_as_seed" in db
     assert "connected_to_seed" in db
+
+
+def test_link_candidate_v21_builder_has_pattern_rules() -> None:
+    db = Path("src/safety_zone_monitor/db.py").read_text(encoding="utf-8")
+
+    assert "A_SHORT_INSIDE" in db
+    assert "A_NEAR_PARALLEL_CORRIDOR" in db
+    assert "A_JUNCTION_COMPONENT" in db
+    assert "TINY_ADJACENCY" in db
+    assert "B_POTENTIAL_GRADE_SEPARATED" in db
+
+
+def test_link_candidate_v21_migration_adds_review_metrics() -> None:
+    migration = Path(
+        "src/safety_zone_monitor/migrations/009_standard_link_match_v21_metrics.sql"
+    ).read_text(encoding="utf-8")
+
+    assert "proximity_overlap_length_m" in migration
+    assert "proximity_overlap_ratio" in migration
+    assert "potential_grade_separated" in migration

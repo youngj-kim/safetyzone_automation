@@ -46,6 +46,13 @@ def _parser() -> argparse.ArgumentParser:
     link_candidates_v2.add_argument("--strong-intersection-ratio", type=float, default=0.2)
     link_candidates_v2.add_argument("--weak-intersection-length-m", type=float, default=10.0)
     link_candidates_v2.add_argument("--weak-intersection-ratio", type=float, default=0.1)
+    link_candidates_v2.add_argument("--short-link-length-m", type=float, default=20.0)
+    link_candidates_v2.add_argument("--short-link-inside-ratio", type=float, default=0.5)
+    link_candidates_v2.add_argument("--near-parallel-length-m", type=float, default=20.0)
+    link_candidates_v2.add_argument("--near-parallel-ratio", type=float, default=0.2)
+    link_candidates_v2.add_argument("--tiny-adjacency-length-m", type=float, default=10.0)
+    link_candidates_v2.add_argument("--tiny-adjacency-ratio", type=float, default=0.1)
+    link_candidates_v2.add_argument("--junction-link-length-m", type=float, default=35.0)
     build_codes = subparsers.add_parser(
         "build-sgg-codes", help="Build current SGG list from the official legal-code CSV"
     )
@@ -116,6 +123,13 @@ def main() -> None:
             strong_intersection_ratio=args.strong_intersection_ratio,
             weak_intersection_length_m=args.weak_intersection_length_m,
             weak_intersection_ratio=args.weak_intersection_ratio,
+            short_link_length_m=args.short_link_length_m,
+            short_link_inside_ratio=args.short_link_inside_ratio,
+            near_parallel_length_m=args.near_parallel_length_m,
+            near_parallel_ratio=args.near_parallel_ratio,
+            tiny_adjacency_length_m=args.tiny_adjacency_length_m,
+            tiny_adjacency_ratio=args.tiny_adjacency_ratio,
+            junction_link_length_m=args.junction_link_length_m,
         )
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return
