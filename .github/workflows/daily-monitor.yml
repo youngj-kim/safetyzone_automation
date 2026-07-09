@@ -7,9 +7,6 @@ on:
         description: "Send a notification test message only; skip DB monitoring"
         required: false
         default: "false"
-  schedule:
-      # 09:00 KST every day (Korea has no daylight-saving time).
-     - cron: "0 0 * * *"
 
 concurrency:
   group: safety-zone-daily-monitor

@@ -16,6 +16,7 @@ htmlcov/
 .actions-runner/
 .gitrepo/
 safety_zone_data/
+.secrets/
 
 # The supplied reference files contain an API key and must not be committed.
 경찰청_보호구역현황_OPEN_API_추출절차.docx
