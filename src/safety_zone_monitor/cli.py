@@ -28,6 +28,14 @@ def _parser() -> argparse.ArgumentParser:
     subparsers.add_parser(
         "test-notification", help="Send a test Slack/Telegram message without touching DB data"
     )
+    link_candidates = subparsers.add_parser(
+        "build-link-candidates",
+        help="Build protection-zone to standard-link spatial match candidates",
+    )
+    link_candidates.add_argument("--near-distance-m", type=float, default=5.0)
+    link_candidates.add_argument("--max-distance-m", type=float, default=20.0)
+    link_candidates.add_argument("--strong-intersection-length-m", type=float, default=10.0)
+    link_candidates.add_argument("--strong-intersection-ratio", type=float, default=0.3)
     build_codes = subparsers.add_parser(
         "build-sgg-codes", help="Build current SGG list from the official legal-code CSV"
     )
@@ -72,6 +80,19 @@ def main() -> None:
         print(json.dumps(report, ensure_ascii=False, indent=2))
         if report["status"] != "PASS":
             raise SystemExit(1)
+        return
+    if args.command == "build-link-candidates":
+        if not settings.sgg_codes:
+            raise RuntimeError("SGG_CODES or SGG_CODES_FILE is required")
+        repository.migrate()
+        report = repository.build_link_match_candidates(
+            settings.sgg_codes,
+            near_distance_m=args.near_distance_m,
+            max_distance_m=args.max_distance_m,
+            strong_intersection_length_m=args.strong_intersection_length_m,
+            strong_intersection_ratio=args.strong_intersection_ratio,
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2))
         return
     if args.command == "test-notification":
         notifier = Notifier(

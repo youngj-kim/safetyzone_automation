@@ -729,3 +729,191 @@ class Repository:
                 "WHERE pipeline_run_id = %s",
                 (run_id,),
             )
+
+    def build_link_match_candidates(
+        self,
+        sgg_codes: tuple[str, ...],
+        *,
+        near_distance_m: float = 5.0,
+        max_distance_m: float = 20.0,
+        strong_intersection_length_m: float = 10.0,
+        strong_intersection_ratio: float = 0.3,
+    ) -> dict[str, Any]:
+        if not sgg_codes:
+            raise ValueError("At least one SGG code is required")
+
+        with self._connect() as connection:
+            connection.execute(
+                "SELECT pg_advisory_xact_lock(hashtext('zone-link-match-candidates'))"
+            )
+            latest_run_id = connection.execute(
+                "SELECT pipeline_run_id FROM ops.pipeline_run "
+                "WHERE status = 'SUCCESS' ORDER BY finished_at DESC LIMIT 1"
+            ).fetchone()
+            connection.execute(
+                "DELETE FROM analysis.zone_link_match_candidate WHERE sgg_code = ANY(%s)",
+                (list(sgg_codes),),
+            )
+            connection.execute(
+                """
+                WITH scoped_zones AS (
+                    SELECT
+                        zone_id,
+                        zone_group_id,
+                        source_manage_no,
+                        facility_name,
+                        sgg_code,
+                        geom
+                    FROM analysis.zone_current
+                    WHERE sgg_code = ANY(%(sgg_codes)s)
+                ),
+                raw_candidates AS (
+                    SELECT
+                        z.zone_id,
+                        z.zone_group_id,
+                        z.source_manage_no,
+                        z.facility_name,
+                        z.sgg_code,
+                        l.link_id,
+                        metrics.intersects,
+                        metrics.distance_m,
+                        metrics.link_length_m,
+                        CASE
+                            WHEN metrics.intersects THEN
+                                ST_Length(
+                                    ST_CollectionExtract(
+                                        ST_Intersection(z.geom, l.geom),
+                                        2
+                                    )
+                                )
+                            ELSE 0::double precision
+                        END AS intersection_length_m
+                    FROM scoped_zones AS z
+                    JOIN mobility.std_link AS l
+                      ON ST_DWithin(z.geom, l.geom, %(max_distance_m)s)
+                    CROSS JOIN LATERAL (
+                        SELECT
+                            ST_Intersects(z.geom, l.geom) AS intersects,
+                            ST_Distance(z.geom, l.geom) AS distance_m,
+                            COALESCE(NULLIF(l.length_m, 0), ST_Length(l.geom))
+                                AS link_length_m
+                    ) AS metrics
+                ),
+                classified AS (
+                    SELECT
+                        *,
+                        CASE
+                            WHEN link_length_m > 0
+                                THEN intersection_length_m / link_length_m
+                            ELSE 0::double precision
+                        END AS intersection_ratio
+                    FROM raw_candidates
+                ),
+                graded AS (
+                    SELECT
+                        *,
+                        CASE
+                            WHEN intersects
+                             AND (
+                                intersection_length_m >= %(strong_intersection_length_m)s
+                                OR intersection_ratio >= %(strong_intersection_ratio)s
+                             )
+                                THEN 'A'
+                            WHEN intersects
+                                THEN 'B'
+                            WHEN distance_m <= %(near_distance_m)s
+                                THEN 'C'
+                            ELSE 'D'
+                        END AS candidate_grade
+                    FROM classified
+                )
+                INSERT INTO analysis.zone_link_match_candidate (
+                    zone_id,
+                    zone_group_id,
+                    source_manage_no,
+                    facility_name,
+                    sgg_code,
+                    link_id,
+                    candidate_grade,
+                    review_status,
+                    distance_m,
+                    intersection_length_m,
+                    link_length_m,
+                    intersection_ratio,
+                    match_reason,
+                    created_run_id
+                )
+                SELECT
+                    zone_id,
+                    zone_group_id,
+                    source_manage_no,
+                    facility_name,
+                    sgg_code,
+                    link_id,
+                    candidate_grade,
+                    CASE
+                        WHEN candidate_grade = 'A' THEN 'AUTO_CANDIDATE'
+                        ELSE 'NEEDS_REVIEW'
+                    END AS review_status,
+                    distance_m,
+                    intersection_length_m,
+                    link_length_m,
+                    intersection_ratio,
+                    CASE candidate_grade
+                        WHEN 'A' THEN 'strong polygon-link intersection'
+                        WHEN 'B' THEN 'weak polygon-link intersection'
+                        WHEN 'C' THEN 'non-intersecting link within 5m'
+                        ELSE 'non-intersecting link within 20m'
+                    END AS match_reason,
+                    %(latest_run_id)s
+                FROM graded
+                ON CONFLICT (zone_id, link_id) DO UPDATE SET
+                    zone_group_id = EXCLUDED.zone_group_id,
+                    source_manage_no = EXCLUDED.source_manage_no,
+                    facility_name = EXCLUDED.facility_name,
+                    sgg_code = EXCLUDED.sgg_code,
+                    candidate_grade = EXCLUDED.candidate_grade,
+                    review_status = EXCLUDED.review_status,
+                    distance_m = EXCLUDED.distance_m,
+                    intersection_length_m = EXCLUDED.intersection_length_m,
+                    link_length_m = EXCLUDED.link_length_m,
+                    intersection_ratio = EXCLUDED.intersection_ratio,
+                    match_reason = EXCLUDED.match_reason,
+                    created_run_id = EXCLUDED.created_run_id,
+                    updated_at = now()
+                """,
+                {
+                    "sgg_codes": list(sgg_codes),
+                    "near_distance_m": near_distance_m,
+                    "max_distance_m": max_distance_m,
+                    "strong_intersection_length_m": strong_intersection_length_m,
+                    "strong_intersection_ratio": strong_intersection_ratio,
+                    "latest_run_id": latest_run_id[0] if latest_run_id else None,
+                },
+            )
+            counts = connection.execute(
+                """
+                SELECT candidate_grade, review_status, COUNT(*)::integer
+                FROM analysis.zone_link_match_candidate
+                WHERE sgg_code = ANY(%s)
+                GROUP BY candidate_grade, review_status
+                ORDER BY candidate_grade, review_status
+                """,
+                (list(sgg_codes),),
+            ).fetchall()
+            total = sum(row[2] for row in counts)
+
+        return {
+            "sgg_codes": sgg_codes,
+            "total_candidates": total,
+            "counts": [
+                {"candidate_grade": row[0], "review_status": row[1], "count": row[2]}
+                for row in counts
+            ],
+            "thresholds": {
+                "near_distance_m": near_distance_m,
+                "max_distance_m": max_distance_m,
+                "strong_intersection_length_m": strong_intersection_length_m,
+                "strong_intersection_ratio": strong_intersection_ratio,
+            },
+        }
