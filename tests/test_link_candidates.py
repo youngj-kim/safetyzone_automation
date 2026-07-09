@@ -62,3 +62,16 @@ def test_link_candidate_v21_migration_adds_review_metrics() -> None:
     assert "proximity_overlap_length_m" in migration
     assert "proximity_overlap_ratio" in migration
     assert "potential_grade_separated" in migration
+
+
+def test_link_candidate_v22_migration_adds_structure_review_fields() -> None:
+    migration = Path(
+        "src/safety_zone_monitor/migrations/010_standard_link_structure_review_fields.sql"
+    ).read_text(encoding="utf-8")
+
+    assert "road_type_name" in migration
+    assert "link_structure_category" in migration
+    assert "structure_review_flag" in migration
+    assert "UNDERPASS_REVIEW" in migration
+    assert "ELEVATED_ROAD_REVIEW" in migration
+    assert "RAMP_CONNECTOR_REVIEW" in migration

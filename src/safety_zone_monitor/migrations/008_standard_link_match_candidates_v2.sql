@@ -73,6 +73,10 @@ CREATE INDEX IF NOT EXISTS zone_link_match_excluded_v2_code_idx
 CREATE INDEX IF NOT EXISTS zone_link_match_excluded_v2_sgg_idx
     ON analysis.zone_link_match_excluded_v2 (sgg_code);
 
+DROP VIEW IF EXISTS analysis.v_zone_link_match_coverage_v2;
+DROP VIEW IF EXISTS analysis.v_zone_link_match_candidate_v2;
+DROP VIEW IF EXISTS analysis.v_zone_link_match_excluded_v2;
+
 CREATE OR REPLACE VIEW analysis.v_zone_link_match_candidate_v2 AS
 SELECT
     c.match_id,
