@@ -917,3 +917,472 @@ class Repository:
                 "strong_intersection_ratio": strong_intersection_ratio,
             },
         }
+
+    def build_link_match_candidates_v2(
+        self,
+        sgg_codes: tuple[str, ...],
+        *,
+        near_distance_m: float = 5.0,
+        max_distance_m: float = 20.0,
+        strong_intersection_length_m: float = 20.0,
+        strong_intersection_ratio: float = 0.2,
+        weak_intersection_length_m: float = 10.0,
+        weak_intersection_ratio: float = 0.1,
+    ) -> dict[str, Any]:
+        """Build second-round standard-link candidates with stricter review rules."""
+        if not sgg_codes:
+            raise ValueError("At least one SGG code is required")
+
+        params = {
+            "sgg_codes": list(sgg_codes),
+            "near_distance_m": near_distance_m,
+            "max_distance_m": max_distance_m,
+            "strong_intersection_length_m": strong_intersection_length_m,
+            "strong_intersection_ratio": strong_intersection_ratio,
+            "weak_intersection_length_m": weak_intersection_length_m,
+            "weak_intersection_ratio": weak_intersection_ratio,
+        }
+
+        with self._connect() as connection:
+            connection.execute(
+                "SELECT pg_advisory_xact_lock(hashtext('zone-link-match-candidates-v2'))"
+            )
+            latest_run_id = connection.execute(
+                "SELECT pipeline_run_id FROM ops.pipeline_run "
+                "WHERE status = 'SUCCESS' ORDER BY finished_at DESC LIMIT 1"
+            ).fetchone()
+            params["latest_run_id"] = latest_run_id[0] if latest_run_id else None
+
+            connection.execute(
+                "DELETE FROM analysis.zone_link_match_candidate_v2 WHERE sgg_code = ANY(%s)",
+                (list(sgg_codes),),
+            )
+            connection.execute(
+                "DELETE FROM analysis.zone_link_match_excluded_v2 WHERE sgg_code = ANY(%s)",
+                (list(sgg_codes),),
+            )
+            connection.execute("DROP TABLE IF EXISTS tmp_zone_link_raw_v2")
+            connection.execute("DROP TABLE IF EXISTS tmp_zone_link_seeds_v2")
+            connection.execute("DROP TABLE IF EXISTS tmp_zone_link_evaluated_v2")
+            connection.execute(
+                """
+                CREATE TEMP TABLE tmp_zone_link_raw_v2 ON COMMIT DROP AS
+                WITH scoped_zones AS (
+                    SELECT
+                        zone_id,
+                        zone_group_id,
+                        source_manage_no,
+                        facility_name,
+                        sgg_code,
+                        geom
+                    FROM analysis.zone_current
+                    WHERE sgg_code = ANY(%(sgg_codes)s)
+                ),
+                raw_candidates AS (
+                    SELECT
+                        z.zone_id,
+                        z.zone_group_id,
+                        z.source_manage_no,
+                        z.facility_name,
+                        z.sgg_code,
+                        l.link_id,
+                        l.road_name,
+                        l.road_no,
+                        l.f_node_id,
+                        l.t_node_id,
+                        metrics.intersects,
+                        metrics.distance_m,
+                        metrics.link_length_m,
+                        metrics.link_midpoint_inside_zone,
+                        CASE
+                            WHEN metrics.intersects THEN
+                                ST_Length(
+                                    ST_CollectionExtract(
+                                        ST_Intersection(z.geom, l.geom),
+                                        2
+                                    )
+                                )
+                            ELSE 0::double precision
+                        END AS intersection_length_m
+                    FROM scoped_zones AS z
+                    JOIN mobility.std_link AS l
+                      ON ST_DWithin(z.geom, l.geom, %(max_distance_m)s)
+                    CROSS JOIN LATERAL (
+                        SELECT
+                            ST_Intersects(z.geom, l.geom) AS intersects,
+                            ST_Distance(z.geom, l.geom) AS distance_m,
+                            COALESCE(NULLIF(l.length_m, 0), ST_Length(l.geom))
+                                AS link_length_m,
+                            ST_Covers(z.geom, ST_Centroid(l.geom))
+                                AS link_midpoint_inside_zone
+                    ) AS metrics
+                )
+                SELECT
+                    *,
+                    CASE
+                        WHEN link_length_m > 0
+                            THEN intersection_length_m / link_length_m
+                        ELSE 0::double precision
+                    END AS intersection_ratio,
+                    (
+                        intersects
+                        AND (
+                            intersection_length_m < %(weak_intersection_length_m)s
+                            OR CASE
+                                WHEN link_length_m > 0
+                                    THEN intersection_length_m / link_length_m
+                                ELSE 0::double precision
+                            END < %(weak_intersection_ratio)s
+                        )
+                    ) AS is_touch_or_graze
+                FROM raw_candidates
+                """,
+                params,
+            )
+            connection.execute(
+                "CREATE INDEX tmp_zone_link_raw_v2_group_idx "
+                "ON tmp_zone_link_raw_v2 (zone_group_id)"
+            )
+            connection.execute(
+                "CREATE INDEX tmp_zone_link_raw_v2_intersects_idx "
+                "ON tmp_zone_link_raw_v2 (intersects)"
+            )
+            connection.execute(
+                "CREATE INDEX tmp_zone_link_raw_v2_node_idx "
+                "ON tmp_zone_link_raw_v2 (f_node_id, t_node_id)"
+            )
+            connection.execute("ANALYZE tmp_zone_link_raw_v2")
+            connection.execute(
+                """
+                CREATE TEMP TABLE tmp_zone_link_seeds_v2 ON COMMIT DROP AS
+                SELECT
+                    *,
+                    CASE
+                        WHEN intersection_length_m >= %(strong_intersection_length_m)s
+                         AND intersection_ratio >= %(strong_intersection_ratio)s
+                            THEN 'A'
+                        ELSE 'B'
+                    END AS seed_grade
+                FROM tmp_zone_link_raw_v2
+                WHERE intersects
+                  AND intersection_length_m >= %(weak_intersection_length_m)s
+                  AND intersection_ratio >= %(weak_intersection_ratio)s
+                """,
+                params,
+            )
+            connection.execute(
+                "CREATE INDEX tmp_zone_link_seeds_v2_group_idx "
+                "ON tmp_zone_link_seeds_v2 (zone_group_id)"
+            )
+            connection.execute(
+                "CREATE INDEX tmp_zone_link_seeds_v2_road_name_idx "
+                "ON tmp_zone_link_seeds_v2 (zone_group_id, road_name)"
+            )
+            connection.execute(
+                "CREATE INDEX tmp_zone_link_seeds_v2_road_no_idx "
+                "ON tmp_zone_link_seeds_v2 (zone_group_id, road_no)"
+            )
+            connection.execute(
+                "CREATE INDEX tmp_zone_link_seeds_v2_node_idx "
+                "ON tmp_zone_link_seeds_v2 (zone_group_id, f_node_id, t_node_id)"
+            )
+            connection.execute("ANALYZE tmp_zone_link_seeds_v2")
+            connection.execute(
+                """
+                CREATE TEMP TABLE tmp_zone_link_evaluated_v2 ON COMMIT DROP AS
+                SELECT
+                    r.*,
+                    seed.seed_link_id,
+                    COALESCE(seed.same_road_as_seed, false) AS same_road_as_seed,
+                    COALESCE(seed.connected_to_seed, false) AS connected_to_seed,
+                    CASE
+                        WHEN r.intersects
+                         AND r.intersection_length_m >= %(strong_intersection_length_m)s
+                         AND r.intersection_ratio >= %(strong_intersection_ratio)s
+                            THEN 'A'
+                        WHEN r.intersects
+                         AND r.intersection_length_m >= %(weak_intersection_length_m)s
+                         AND r.intersection_ratio >= %(weak_intersection_ratio)s
+                            THEN 'B'
+                        WHEN NOT r.intersects
+                         AND r.distance_m <= %(near_distance_m)s
+                         AND seed.seed_link_id IS NOT NULL
+                         AND (seed.same_road_as_seed OR seed.connected_to_seed)
+                            THEN 'C'
+                        WHEN NOT r.intersects
+                         AND r.distance_m <= %(max_distance_m)s
+                         AND seed.seed_link_id IS NOT NULL
+                         AND seed.connected_to_seed
+                            THEN 'D'
+                    END AS candidate_grade
+                FROM tmp_zone_link_raw_v2 AS r
+                LEFT JOIN LATERAL (
+                    SELECT
+                        s.link_id AS seed_link_id,
+                        (
+                            NULLIF(r.road_name, '') IS NOT NULL
+                            AND r.road_name = s.road_name
+                        )
+                        OR (
+                            NULLIF(r.road_no, '') IS NOT NULL
+                            AND r.road_no = s.road_no
+                        ) AS same_road_as_seed,
+                        r.f_node_id IN (s.f_node_id, s.t_node_id)
+                        OR r.t_node_id IN (s.f_node_id, s.t_node_id)
+                            AS connected_to_seed
+                    FROM tmp_zone_link_seeds_v2 AS s
+                    WHERE s.zone_group_id = r.zone_group_id
+                      AND s.link_id <> r.link_id
+                      AND (
+                        (
+                            NULLIF(r.road_name, '') IS NOT NULL
+                            AND r.road_name = s.road_name
+                        )
+                        OR (
+                            NULLIF(r.road_no, '') IS NOT NULL
+                            AND r.road_no = s.road_no
+                        )
+                        OR r.f_node_id IN (s.f_node_id, s.t_node_id)
+                        OR r.t_node_id IN (s.f_node_id, s.t_node_id)
+                      )
+                    ORDER BY
+                        CASE s.seed_grade WHEN 'A' THEN 1 ELSE 2 END,
+                        s.distance_m,
+                        s.link_id
+                    LIMIT 1
+                ) AS seed ON NOT r.intersects
+                """,
+                params,
+            )
+            connection.execute(
+                "CREATE INDEX tmp_zone_link_evaluated_v2_grade_idx "
+                "ON tmp_zone_link_evaluated_v2 (candidate_grade)"
+            )
+            connection.execute(
+                "CREATE INDEX tmp_zone_link_evaluated_v2_sgg_idx "
+                "ON tmp_zone_link_evaluated_v2 (sgg_code)"
+            )
+            connection.execute("ANALYZE tmp_zone_link_evaluated_v2")
+            connection.execute(
+                """
+                INSERT INTO analysis.zone_link_match_candidate_v2 (
+                    zone_id,
+                    zone_group_id,
+                    source_manage_no,
+                    facility_name,
+                    sgg_code,
+                    link_id,
+                    candidate_grade,
+                    review_status,
+                    distance_m,
+                    intersection_length_m,
+                    link_length_m,
+                    intersection_ratio,
+                    match_rule_code,
+                    match_rule_description,
+                    is_touch_or_graze,
+                    link_midpoint_inside_zone,
+                    same_road_as_seed,
+                    connected_to_seed,
+                    seed_link_id,
+                    created_run_id
+                )
+                SELECT
+                    zone_id,
+                    zone_group_id,
+                    source_manage_no,
+                    facility_name,
+                    sgg_code,
+                    link_id,
+                    candidate_grade,
+                    CASE
+                        WHEN candidate_grade = 'A' THEN 'AUTO_CANDIDATE'
+                        ELSE 'NEEDS_REVIEW'
+                    END AS review_status,
+                    distance_m,
+                    intersection_length_m,
+                    link_length_m,
+                    intersection_ratio,
+                    CASE candidate_grade
+                        WHEN 'A' THEN 'A_STRONG_OVERLAP'
+                        WHEN 'B' THEN 'B_WEAK_OVERLAP'
+                        WHEN 'C' THEN 'C_NEAR_CONNECTED_OR_SAME_ROAD'
+                        ELSE 'D_EXTENDED_NODE_CONNECTED'
+                    END AS match_rule_code,
+                    CASE candidate_grade
+                        WHEN 'A'
+                            THEN 'direct overlap meeting both length and ratio thresholds'
+                        WHEN 'B'
+                            THEN 'direct overlap meeting weak length and ratio thresholds'
+                        WHEN 'C'
+                            THEN 'nearby non-intersecting link tied to an A/B seed'
+                        ELSE 'extended nearby non-intersecting link node-connected to an A/B seed'
+                    END AS match_rule_description,
+                    is_touch_or_graze,
+                    link_midpoint_inside_zone,
+                    CASE WHEN candidate_grade IN ('A', 'B') THEN false ELSE same_road_as_seed END,
+                    CASE WHEN candidate_grade IN ('A', 'B') THEN false ELSE connected_to_seed END,
+                    CASE WHEN candidate_grade IN ('A', 'B') THEN link_id ELSE seed_link_id END,
+                    %(latest_run_id)s
+                FROM tmp_zone_link_evaluated_v2
+                WHERE candidate_grade IS NOT NULL
+                ON CONFLICT (zone_id, link_id) DO UPDATE SET
+                    zone_group_id = EXCLUDED.zone_group_id,
+                    source_manage_no = EXCLUDED.source_manage_no,
+                    facility_name = EXCLUDED.facility_name,
+                    sgg_code = EXCLUDED.sgg_code,
+                    candidate_grade = EXCLUDED.candidate_grade,
+                    review_status = EXCLUDED.review_status,
+                    distance_m = EXCLUDED.distance_m,
+                    intersection_length_m = EXCLUDED.intersection_length_m,
+                    link_length_m = EXCLUDED.link_length_m,
+                    intersection_ratio = EXCLUDED.intersection_ratio,
+                    match_rule_code = EXCLUDED.match_rule_code,
+                    match_rule_description = EXCLUDED.match_rule_description,
+                    is_touch_or_graze = EXCLUDED.is_touch_or_graze,
+                    link_midpoint_inside_zone = EXCLUDED.link_midpoint_inside_zone,
+                    same_road_as_seed = EXCLUDED.same_road_as_seed,
+                    connected_to_seed = EXCLUDED.connected_to_seed,
+                    seed_link_id = EXCLUDED.seed_link_id,
+                    created_run_id = EXCLUDED.created_run_id,
+                    updated_at = now()
+                """,
+                params,
+            )
+            connection.execute(
+                """
+                INSERT INTO analysis.zone_link_match_excluded_v2 (
+                    zone_id,
+                    zone_group_id,
+                    source_manage_no,
+                    facility_name,
+                    sgg_code,
+                    link_id,
+                    distance_m,
+                    intersection_length_m,
+                    link_length_m,
+                    intersection_ratio,
+                    exclusion_code,
+                    exclusion_reason,
+                    is_touch_or_graze,
+                    link_midpoint_inside_zone,
+                    created_run_id
+                )
+                SELECT
+                    zone_id,
+                    zone_group_id,
+                    source_manage_no,
+                    facility_name,
+                    sgg_code,
+                    link_id,
+                    distance_m,
+                    intersection_length_m,
+                    link_length_m,
+                    intersection_ratio,
+                    CASE
+                        WHEN is_touch_or_graze THEN 'TOUCH_OR_GRAZE'
+                        WHEN NOT intersects AND seed_link_id IS NULL THEN 'NO_AB_SEED'
+                        WHEN NOT intersects
+                         AND distance_m <= %(near_distance_m)s
+                         AND NOT (same_road_as_seed OR connected_to_seed)
+                            THEN 'NEAR_BUT_UNRELATED_TO_SEED'
+                        WHEN NOT intersects
+                         AND distance_m <= %(max_distance_m)s
+                         AND NOT connected_to_seed
+                            THEN 'EXTENDED_BUT_NOT_NODE_CONNECTED'
+                        ELSE 'V2_RULE_EXCLUDED'
+                    END AS exclusion_code,
+                    CASE
+                        WHEN is_touch_or_graze
+                            THEN 'link only touches or grazes the zone boundary'
+                        WHEN NOT intersects AND seed_link_id IS NULL
+                            THEN 'no A/B seed exists in the same zone group'
+                        WHEN NOT intersects
+                         AND distance_m <= %(near_distance_m)s
+                         AND NOT (same_road_as_seed OR connected_to_seed)
+                            THEN 'nearby link is not same-road or node-connected to a seed'
+                        WHEN NOT intersects
+                         AND distance_m <= %(max_distance_m)s
+                         AND NOT connected_to_seed
+                            THEN 'extended-distance link is not node-connected to a seed'
+                        ELSE 'candidate did not satisfy second-round rules'
+                    END AS exclusion_reason,
+                    is_touch_or_graze,
+                    link_midpoint_inside_zone,
+                    %(latest_run_id)s
+                FROM tmp_zone_link_evaluated_v2
+                WHERE candidate_grade IS NULL
+                ON CONFLICT (zone_id, link_id) DO UPDATE SET
+                    zone_group_id = EXCLUDED.zone_group_id,
+                    source_manage_no = EXCLUDED.source_manage_no,
+                    facility_name = EXCLUDED.facility_name,
+                    sgg_code = EXCLUDED.sgg_code,
+                    distance_m = EXCLUDED.distance_m,
+                    intersection_length_m = EXCLUDED.intersection_length_m,
+                    link_length_m = EXCLUDED.link_length_m,
+                    intersection_ratio = EXCLUDED.intersection_ratio,
+                    exclusion_code = EXCLUDED.exclusion_code,
+                    exclusion_reason = EXCLUDED.exclusion_reason,
+                    is_touch_or_graze = EXCLUDED.is_touch_or_graze,
+                    link_midpoint_inside_zone = EXCLUDED.link_midpoint_inside_zone,
+                    created_run_id = EXCLUDED.created_run_id,
+                    updated_at = now()
+                """,
+                params,
+            )
+            counts = connection.execute(
+                """
+                SELECT candidate_grade, review_status, COUNT(*)::integer
+                FROM analysis.zone_link_match_candidate_v2
+                WHERE sgg_code = ANY(%s)
+                GROUP BY candidate_grade, review_status
+                ORDER BY candidate_grade, review_status
+                """,
+                (list(sgg_codes),),
+            ).fetchall()
+            excluded_counts = connection.execute(
+                """
+                SELECT exclusion_code, COUNT(*)::integer
+                FROM analysis.zone_link_match_excluded_v2
+                WHERE sgg_code = ANY(%s)
+                GROUP BY exclusion_code
+                ORDER BY exclusion_code
+                """,
+                (list(sgg_codes),),
+            ).fetchall()
+            coverage_counts = connection.execute(
+                """
+                SELECT coverage_status, COUNT(*)::integer
+                FROM analysis.v_zone_link_match_coverage_v2
+                WHERE sgg_code = ANY(%s)
+                GROUP BY coverage_status
+                ORDER BY coverage_status
+                """,
+                (list(sgg_codes),),
+            ).fetchall()
+            total = sum(row[2] for row in counts)
+            excluded_total = sum(row[1] for row in excluded_counts)
+
+        return {
+            "sgg_codes": sgg_codes,
+            "total_candidates": total,
+            "total_excluded": excluded_total,
+            "counts": [
+                {"candidate_grade": row[0], "review_status": row[1], "count": row[2]}
+                for row in counts
+            ],
+            "excluded_counts": [
+                {"exclusion_code": row[0], "count": row[1]} for row in excluded_counts
+            ],
+            "coverage_counts": [
+                {"coverage_status": row[0], "count": row[1]} for row in coverage_counts
+            ],
+            "thresholds": {
+                "near_distance_m": near_distance_m,
+                "max_distance_m": max_distance_m,
+                "strong_intersection_length_m": strong_intersection_length_m,
+                "strong_intersection_ratio": strong_intersection_ratio,
+                "weak_intersection_length_m": weak_intersection_length_m,
+                "weak_intersection_ratio": weak_intersection_ratio,
+            },
+        }

@@ -36,6 +36,16 @@ def _parser() -> argparse.ArgumentParser:
     link_candidates.add_argument("--max-distance-m", type=float, default=20.0)
     link_candidates.add_argument("--strong-intersection-length-m", type=float, default=10.0)
     link_candidates.add_argument("--strong-intersection-ratio", type=float, default=0.3)
+    link_candidates_v2 = subparsers.add_parser(
+        "build-link-candidates-v2",
+        help="Build stricter second-round protection-zone to standard-link candidates",
+    )
+    link_candidates_v2.add_argument("--near-distance-m", type=float, default=5.0)
+    link_candidates_v2.add_argument("--max-distance-m", type=float, default=20.0)
+    link_candidates_v2.add_argument("--strong-intersection-length-m", type=float, default=20.0)
+    link_candidates_v2.add_argument("--strong-intersection-ratio", type=float, default=0.2)
+    link_candidates_v2.add_argument("--weak-intersection-length-m", type=float, default=10.0)
+    link_candidates_v2.add_argument("--weak-intersection-ratio", type=float, default=0.1)
     build_codes = subparsers.add_parser(
         "build-sgg-codes", help="Build current SGG list from the official legal-code CSV"
     )
@@ -91,6 +101,21 @@ def main() -> None:
             max_distance_m=args.max_distance_m,
             strong_intersection_length_m=args.strong_intersection_length_m,
             strong_intersection_ratio=args.strong_intersection_ratio,
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return
+    if args.command == "build-link-candidates-v2":
+        if not settings.sgg_codes:
+            raise RuntimeError("SGG_CODES or SGG_CODES_FILE is required")
+        repository.migrate()
+        report = repository.build_link_match_candidates_v2(
+            settings.sgg_codes,
+            near_distance_m=args.near_distance_m,
+            max_distance_m=args.max_distance_m,
+            strong_intersection_length_m=args.strong_intersection_length_m,
+            strong_intersection_ratio=args.strong_intersection_ratio,
+            weak_intersection_length_m=args.weak_intersection_length_m,
+            weak_intersection_ratio=args.weak_intersection_ratio,
         )
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return
