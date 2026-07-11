@@ -1,3 +1,7 @@
+DROP VIEW IF EXISTS analysis.v_zone_link_match_coverage_review_v23;
+DROP VIEW IF EXISTS analysis.v_zone_link_match_excluded_review_v23;
+DROP VIEW IF EXISTS analysis.v_zone_link_match_candidate_review_v23;
+
 DROP VIEW IF EXISTS analysis.v_zone_link_match_candidate_v2;
 DROP VIEW IF EXISTS analysis.v_zone_link_match_excluded_v2;
 

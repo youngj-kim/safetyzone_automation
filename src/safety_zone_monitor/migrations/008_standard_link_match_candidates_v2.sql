@@ -1,3 +1,7 @@
+DROP VIEW IF EXISTS analysis.v_zone_link_match_coverage_review_v23;
+DROP VIEW IF EXISTS analysis.v_zone_link_match_excluded_review_v23;
+DROP VIEW IF EXISTS analysis.v_zone_link_match_candidate_review_v23;
+
 CREATE TABLE IF NOT EXISTS analysis.zone_link_match_candidate_v2 (
     match_id bigserial PRIMARY KEY,
     zone_id char(64) NOT NULL REFERENCES analysis.zone_current(zone_id) ON DELETE CASCADE,

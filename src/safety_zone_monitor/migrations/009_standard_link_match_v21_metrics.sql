@@ -1,3 +1,7 @@
+DROP VIEW IF EXISTS analysis.v_zone_link_match_coverage_review_v23;
+DROP VIEW IF EXISTS analysis.v_zone_link_match_excluded_review_v23;
+DROP VIEW IF EXISTS analysis.v_zone_link_match_candidate_review_v23;
+
 ALTER TABLE analysis.zone_link_match_candidate_v2
     ADD COLUMN IF NOT EXISTS proximity_overlap_length_m double precision NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS proximity_overlap_ratio double precision NOT NULL DEFAULT 0,
