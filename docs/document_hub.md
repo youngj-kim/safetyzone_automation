@@ -58,7 +58,7 @@ DB 관련 문서는 두 저장소에 나뉘어 있다.
 ### DB와 운영
 
 - `docs/standard_node_link_db_contract.md`: safetyzone 관점의 외부 DB 계약
-- `docs/ngii_road_centerline_postgis.md`: NGII 도로중심선 서울/경기 PostGIS 등록 및 단순화 절차
+- `docs/ngii_road_centerline_postgis.md`: NGII 도로중심선 전국통판 PostGIS 등록 및 서울 검증 절차
 - `D:\standard-node-link-postgis\docs\db_operations_runbook.md`: DB 운영 점검 런북
 - `docs/database_table_guide.md`: 보호구역 모니터링 테이블 설명
 - `sql/qc_monitoring_schema.sql`: 보호구역 스키마 QC SQL
