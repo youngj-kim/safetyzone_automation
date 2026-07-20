@@ -13,6 +13,8 @@
 - GitHub Actions Runner 서비스가 실행 중
 - Docker Desktop과 `mobility_postgis` 컨테이너가 실행 중
 - Python 3.11 이상이 self-hosted PC의 PATH에 등록되어 있음
+- Windows 시간이 정상 동기화되어 있음. 시간이 어긋나면 GitHub 연결에서
+  `certificate chain: NotTimeValid` SSL 오류가 날 수 있다.
 
 ## GitHub 저장소 설정
 
@@ -54,3 +56,21 @@ SGG_CODES_FILE=config/sgg_codes_nationwide.txt
 GitHub Actions의 `Daily safety-zone monitor`에서 `Run workflow`를 눌러 한 번 실행한다.
 모든 단계가 초록색인지 확인하고 다음 날 예약 실행 이력을 확인한다. 예약 실행은 PC,
 Runner 서비스 또는 Docker가 꺼져 있으면 정상 완료될 수 없다.
+
+## Windows 시간 동기화 점검
+
+self-hosted runner가 GitHub와 HTTPS로 통신하므로 Windows 시간이 크게 어긋나면 인증서
+검증이 실패할 수 있다. 다음과 같은 오류가 보이면 PC 시간을 먼저 동기화한다.
+
+```text
+certificate chain: NotTimeValid
+```
+
+관리자 권한 PowerShell에서 다음을 실행한다.
+
+```powershell
+net start w32time
+w32tm /resync /force
+```
+
+동기화 후 GitHub Actions Runner 서비스를 재시작하고 workflow를 다시 수동 실행한다.
