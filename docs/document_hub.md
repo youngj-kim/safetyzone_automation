@@ -22,6 +22,7 @@
 |---|---|
 | 1번 자동화 설계 | `docs/document_hub.md`, `README.md`, `docs/mvp_project_status.md` |
 | DB 구축 및 운영 | `docs/standard_node_link_db_contract.md`, `D:\standard-node-link-postgis\docs\db_operations_runbook.md` |
+| 5번 NGII 도로중심선 PostGIS | `docs/ngii_road_centerline_postgis.md` |
 | 보호구역 수집/변경 감지 자동화 | `README.md`, `docs/database_table_guide.md`, `docs/change_event_verification.md` |
 | 자동 실행/스케줄링 | `docs/daily_automation.md`, `docs/windows_scheduler_github_dispatch.md` |
 | 알림 | `docs/telegram_notification_setup.md` |
@@ -57,6 +58,7 @@ DB 관련 문서는 두 저장소에 나뉘어 있다.
 ### DB와 운영
 
 - `docs/standard_node_link_db_contract.md`: safetyzone 관점의 외부 DB 계약
+- `docs/ngii_road_centerline_postgis.md`: NGII 도로중심선 서울/경기 PostGIS 등록 및 단순화 절차
 - `D:\standard-node-link-postgis\docs\db_operations_runbook.md`: DB 운영 점검 런북
 - `docs/database_table_guide.md`: 보호구역 모니터링 테이블 설명
 - `sql/qc_monitoring_schema.sql`: 보호구역 스키마 QC SQL
@@ -109,3 +111,9 @@ DB 장애나 서버 이전은 다음 순서로 본다.
 2. `docs/standard_link_matching_v23_review_policy.md`
 3. `docs/standard_link_matching_round2_casebook.md`
 4. `docs/qgis_style_guide_for_link_matching.md`
+
+NGII 도로중심선 PostGIS 작업은 다음 순서로 본다.
+
+1. `docs/ngii_road_centerline_postgis.md`
+2. `docs/standard_node_link_db_contract.md`
+3. `D:\standard-node-link-postgis\docs\db_operations_runbook.md`
