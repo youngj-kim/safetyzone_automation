@@ -22,11 +22,14 @@ const state = {
   events: [],
   eventLayers: new Map(),
   eventFeatures: new Map(),
+  currentItems: [],
+  currentLayers: new Map(),
+  currentFeatures: new Map(),
   timelines: new Map(),
   polygonDeletedManageNos: new Set(),
   currentGroups: new Map(),
 };
-document.body.dataset.dashboardVersion = "20260723-12";
+document.body.dataset.dashboardVersion = "20260723-13";
 
 function numberText(value) {
   return Number(value || 0).toLocaleString("ko-KR");
@@ -106,20 +109,39 @@ function currentLayerKey(code) {
   return "currentOther";
 }
 
-function matchesEventFilter(event, filterValue) {
+function matchesZoneFilter(item, filterValue) {
   if (!filterValue) return true;
   const [filterKind, filterTarget] = filterValue.split(":");
-  if (filterKind === "TYPE") {
-    return event.change_type === filterTarget;
-  }
   if (filterKind === "ZONE") {
-    const normalized = String(event.facility_type_code || "").trim();
+    const normalized = String(item.facility_type_code || "").trim();
     if (filterTarget === "OTHER") {
       return !["1", "2", "3"].includes(normalized);
     }
     return normalized === filterTarget;
   }
   return true;
+}
+
+function currentItemKey(props) {
+  return `${props.layer_type}:${props.facility_id || props.source_manage_no || props.zone_group_id}`;
+}
+
+function buildCurrentItems(zones, points) {
+  return [...(zones.features || []), ...(points.features || [])]
+    .map((feature) => ({
+      layer_type: feature.geometry?.type === "Point" ? "Point" : "Polygon",
+      ...(feature.properties || {}),
+    }))
+    .sort((left, right) =>
+      [
+        zoneTypeInfo(left.facility_type_code).label.localeCompare(
+          zoneTypeInfo(right.facility_type_code).label,
+          "ko-KR",
+        ),
+        String(left.facility_name || "").localeCompare(String(right.facility_name || ""), "ko-KR"),
+        String(left.layer_type || "").localeCompare(String(right.layer_type || ""), "ko-KR"),
+      ].find((result) => result !== 0) || 0,
+    );
 }
 
 function summarizeNames(names) {
@@ -304,6 +326,40 @@ function focusEvent(event) {
   document.body.dataset.lastPopup = key;
 }
 
+function focusCurrentItem(item) {
+  const category = currentLayerKey(item.facility_type_code);
+  ensureLayerVisible(category);
+
+  const key = currentItemKey(item);
+  const layer = state.currentLayers.get(key);
+  const feature = state.currentFeatures.get(key);
+  const bounds =
+    boundsFromFeature(feature) ||
+    (layer?.getBounds ? layer.getBounds() : null) ||
+    (layer?.getLatLng ? L.latLngBounds([layer.getLatLng()]) : null);
+
+  window.dashboardLastFocus = {
+    key,
+    hasLayer: Boolean(layer),
+    hasFeature: Boolean(feature),
+    hasBounds: Boolean(bounds),
+    isValid: Boolean(bounds?.isValid()),
+  };
+  document.body.dataset.lastFocus = JSON.stringify(window.dashboardLastFocus);
+  if (!bounds?.isValid()) return;
+  const center = bounds.getCenter();
+  if (item.layer_type === "Point" || bounds.getNorthEast().equals(bounds.getSouthWest())) {
+    map.setView(center, Math.max(map.getZoom(), 17), { animate: true });
+  } else {
+    map.fitBounds(bounds.pad(0.35), { maxZoom: 17, animate: true });
+  }
+  L.popup({ maxWidth: 320 })
+    .setLatLng(center)
+    .setContent(popupContent(item))
+    .openOn(map);
+  document.body.dataset.lastPopup = key;
+}
+
 function popupContent(props) {
   const enriched = enrichReviewProperties(props);
   const title = props.facility_name || "이름 없음";
@@ -395,8 +451,9 @@ function renderOverview(overview) {
 
 function renderEvents() {
   const query = document.getElementById("event-search").value.trim().toLowerCase();
-  const filterValue = document.getElementById("event-type").value;
+  const type = document.getElementById("event-type").value;
   const filtered = state.events.filter((event) => {
+    const matchesType = !type || event.change_type === type;
     const haystack = [
       event.facility_name,
       event.source_manage_no,
@@ -408,7 +465,7 @@ function renderEvents() {
     ]
       .join(" ")
       .toLowerCase();
-    return matchesEventFilter(event, filterValue) && (!query || haystack.includes(query));
+    return matchesType && (!query || haystack.includes(query));
   });
 
   document.getElementById("event-total").textContent = `${numberText(filtered.length)}건`;
@@ -463,6 +520,68 @@ function renderEvents() {
   );
 }
 
+function renderCurrentItems() {
+  const query = document.getElementById("current-search").value.trim().toLowerCase();
+  const filterValue = document.getElementById("current-zone-type").value;
+  const filtered = state.currentItems.filter((item) => {
+    const haystack = [
+      item.facility_name,
+      item.source_manage_no,
+      item.sgg_code,
+      item.zone_group_id,
+      item.layer_type,
+      item.facility_type_code,
+      zoneTypeInfo(item.facility_type_code).label,
+    ]
+      .join(" ")
+      .toLowerCase();
+    return matchesZoneFilter(item, filterValue) && (!query || haystack.includes(query));
+  });
+
+  document.getElementById("current-total").textContent = `${numberText(filtered.length)}건`;
+  const currentList = document.getElementById("current-list");
+  currentList.replaceChildren(
+    ...filtered.slice(0, 200).map((item) => {
+      const zoneType = zoneTypeInfo(item.facility_type_code);
+      const listItem = document.createElement("li");
+      listItem.className = "current-item";
+      listItem.tabIndex = 0;
+      listItem.setAttribute("role", "button");
+      listItem.setAttribute("aria-label", `${item.facility_name || "이름 없음"} 위치로 이동`);
+      listItem.innerHTML = `
+        <div class="event-topline">
+          <span class="event-title">${item.facility_name || "이름 없음"}</span>
+          <span class="badge current-badge">${item.layer_type}</span>
+        </div>
+        <div class="event-meta">
+          <span class="zone-type" style="--zone-type-color: ${zoneType.color}">${zoneType.label}</span><br>
+          ${item.layer_type} · ${item.source_manage_no || "-"} · ${item.sgg_code || "-"}<br>
+          그룹 ${item.zone_group_id || "-"}
+          ${
+            item.api_last_modified_on
+              ? `<br><span>API 최종수정 ${formatApiDate(item.api_last_modified_on)}</span>`
+              : ""
+          }
+        </div>
+      `;
+      listItem.addEventListener("click", () => {
+        document.querySelectorAll(".current-item.selected").forEach((selectedItem) => {
+          selectedItem.classList.remove("selected");
+        });
+        listItem.classList.add("selected");
+        focusCurrentItem(item);
+      });
+      listItem.addEventListener("keydown", (keyboardEvent) => {
+        if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") {
+          keyboardEvent.preventDefault();
+          focusCurrentItem(item);
+        }
+      });
+      return listItem;
+    }),
+  );
+}
+
 function addCurrentZones(geojson) {
   return Object.keys(layerGroups)
     .filter((key) => key.startsWith("current"))
@@ -485,6 +604,8 @@ function addCurrentZones(geojson) {
             ...(feature.properties || {}),
           });
           feature.properties = props;
+          state.currentLayers.set(currentItemKey(props), itemLayer);
+          state.currentFeatures.set(currentItemKey(props), feature);
           itemLayer.bindPopup(popupContent(props));
         },
       }).addTo(layerGroups[key]),
@@ -513,6 +634,8 @@ function addCurrentPoints(geojson) {
             ...(feature.properties || {}),
           });
           feature.properties = props;
+          state.currentLayers.set(currentItemKey(props), itemLayer);
+          state.currentFeatures.set(currentItemKey(props), feature);
           itemLayer.bindPopup(popupContent(props));
         },
       }).addTo(layerGroups[key]),
@@ -588,6 +711,8 @@ async function main() {
   bindActivityTabs();
   document.getElementById("event-search").addEventListener("input", renderEvents);
   document.getElementById("event-type").addEventListener("change", renderEvents);
+  document.getElementById("current-search").addEventListener("input", renderCurrentItems);
+  document.getElementById("current-zone-type").addEventListener("change", renderCurrentItems);
 
   const [overview, events, zones, points, changeZones, changePoints, timelines] = await Promise.all([
     loadJson("data/overview.json"),
@@ -601,6 +726,7 @@ async function main() {
 
   renderOverview(overview);
   state.events = events.events || [];
+  state.currentItems = buildCurrentItems(zones, points);
   state.timelines = new Map(
     (timelines.timelines || []).map((timeline) => [timeline.entity_key, timeline]),
   );
@@ -622,6 +748,7 @@ async function main() {
   addChangeLayer(changeZones);
   addChangeLayer(changePoints);
   renderEvents();
+  renderCurrentItems();
 
   const allMapLayers = Object.values(layerGroups)
     .flatMap((group) => Object.values(group._layers))

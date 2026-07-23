@@ -395,6 +395,7 @@ input[type="checkbox"] {
 }
 
 .event-list,
+.current-list,
 .run-list {
   display: grid;
   align-content: start;
@@ -407,6 +408,7 @@ input[type="checkbox"] {
 }
 
 .event-item,
+.current-item,
 .run-item {
   padding: 12px;
   border: 1px solid var(--line);
@@ -416,11 +418,13 @@ input[type="checkbox"] {
 }
 
 .event-item:hover,
+.current-item:hover,
 .run-item:hover {
   border-color: #9fb8aa;
 }
 
-.event-item.selected {
+.event-item.selected,
+.current-item.selected {
   border-color: var(--green);
   box-shadow: inset 3px 0 0 var(--green);
 }
@@ -461,6 +465,10 @@ input[type="checkbox"] {
 
 .badge.MISSING {
   background: var(--gray);
+}
+
+.badge.current-badge {
+  background: var(--text);
 }
 
 .badge.ATTRIBUTE_CHANGED,
@@ -665,6 +673,7 @@ input[type="checkbox"] {
   }
 
   .event-list,
+  .current-list,
   .run-list {
     max-height: 40vh;
   }
