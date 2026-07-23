@@ -23,7 +23,7 @@ const state = {
   polygonDeletedManageNos: new Set(),
   currentGroups: new Map(),
 };
-document.body.dataset.dashboardVersion = "20260723-8";
+document.body.dataset.dashboardVersion = "20260723-9";
 
 function numberText(value) {
   return Number(value || 0).toLocaleString("ko-KR");
@@ -58,9 +58,9 @@ function changeCategory(type) {
 function zoneTypeInfo(code) {
   const normalized = String(code || "").trim();
   const types = {
-    1: { label: "어린이보호구역", color: "#2d6cdf", fillOpacity: 0.1 },
-    2: { label: "노인보호구역", color: "#8b5a00", fillOpacity: 0.12 },
-    3: { label: "장애인보호구역", color: "#00856f", fillOpacity: 0.12 },
+    1: { label: "어린이보호구역", color: "#2563eb", fillOpacity: 0.1 },
+    2: { label: "노인보호구역", color: "#be185d", fillOpacity: 0.12 },
+    3: { label: "장애인보호구역", color: "#0891b2", fillOpacity: 0.12 },
   };
   return types[normalized] || {
     label: "보호구역 유형 미분류",

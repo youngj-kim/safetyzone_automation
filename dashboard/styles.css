@@ -9,6 +9,9 @@
   --amber: #c77900;
   --red: #cf3f35;
   --gray: #707985;
+  --zone-child: #2563eb;
+  --zone-senior: #be185d;
+  --zone-disabled: #0891b2;
 }
 
 /* Local Leaflet essentials. This keeps the map correct even if CDN CSS is blocked. */
@@ -559,15 +562,15 @@ input[type="checkbox"] {
 }
 
 .zone-child {
-  background: #2d6cdf;
+  background: var(--zone-child);
 }
 
 .zone-senior {
-  background: #8b5a00;
+  background: var(--zone-senior);
 }
 
 .zone-disabled {
-  background: #00856f;
+  background: var(--zone-disabled);
 }
 
 .change-new {
