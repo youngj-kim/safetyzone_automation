@@ -479,6 +479,13 @@ input[type="checkbox"] {
   line-height: 1.45;
 }
 
+.run-error {
+  display: inline-block;
+  margin: 4px 0 2px;
+  color: var(--red);
+  font-weight: 700;
+}
+
 .timeline-summary {
   color: var(--text);
   font-weight: 700;
@@ -571,6 +578,10 @@ input[type="checkbox"] {
 
 .zone-disabled {
   background: var(--zone-disabled);
+}
+
+.zone-other {
+  background: var(--gray);
 }
 
 .change-new {

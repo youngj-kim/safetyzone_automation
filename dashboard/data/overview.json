@@ -297,7 +297,7 @@
         "deleted": 0,
         "missing": 0
       },
-      "error_message": "ApiError: Failed to fetch 11110 page 1: HTTPSConnectionPool(host='apis.data.go.kr', port=443): Max retries exceeded with url: /1320000/safetyzonedtlinfo/getdtllist?serviceKey=e5d3a0e8596bda3eef3fe0853ec3227fcc811c5a38f58fa00daebb32599ad928&numOfRows=1000&pageNo=1&sggCd=11110 (Caused by ResponseError('too many 429 error responses'))",
+      "error_message": "ApiError: Failed to fetch 11110 page 1: HTTPSConnectionPool(host='apis.data.go.kr', port=443): Max retries exceeded with url: /1320000/safetyzonedtlinfo/getdtllist?serviceKey=[REDACTED]&numOfRows=1000&pageNo=1&sggCd=11110 (Caused by ResponseError('too many 429 error responses'))",
       "notification_sent_at": null
     },
     {
@@ -592,7 +592,7 @@
         "deleted": 0,
         "missing": 0
       },
-      "error_message": "ApiError: Failed to fetch 11110 page 1: HTTPSConnectionPool(host='apis.data.go.kr', port=443): Max retries exceeded with url: /1320000/safetyzonedtlinfo/getdtllist?serviceKey=e5d3a0e8596bda3eef3fe0853ec3227fcc811c5a38f58fa00daebb32599ad928&numOfRows=1000&pageNo=1&sggCd=11110 (Caused by ResponseError('too many 429 error responses'))",
+      "error_message": "ApiError: Failed to fetch 11110 page 1: HTTPSConnectionPool(host='apis.data.go.kr', port=443): Max retries exceeded with url: /1320000/safetyzonedtlinfo/getdtllist?serviceKey=[REDACTED]&numOfRows=1000&pageNo=1&sggCd=11110 (Caused by ResponseError('too many 429 error responses'))",
       "notification_sent_at": null
     },
     {

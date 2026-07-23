@@ -9,7 +9,10 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 }).addTo(map);
 
 const layerGroups = {
-  current: L.layerGroup().addTo(map),
+  currentChild: L.layerGroup().addTo(map),
+  currentSenior: L.layerGroup().addTo(map),
+  currentDisabled: L.layerGroup().addTo(map),
+  currentOther: L.layerGroup().addTo(map),
   new: L.layerGroup().addTo(map),
   changed: L.layerGroup().addTo(map),
   review: L.layerGroup().addTo(map),
@@ -23,7 +26,7 @@ const state = {
   polygonDeletedManageNos: new Set(),
   currentGroups: new Map(),
 };
-document.body.dataset.dashboardVersion = "20260723-9";
+document.body.dataset.dashboardVersion = "20260723-11";
 
 function numberText(value) {
   return Number(value || 0).toLocaleString("ko-KR");
@@ -40,6 +43,32 @@ function formatDate(value) {
 function formatApiDate(value) {
   if (!value) return "-";
   return value;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function runFailureReason(errorMessage) {
+  if (!errorMessage) return "";
+  const message = String(errorMessage);
+  if (message.includes("too many 429")) {
+    return "공공 API 요청 제한(429)으로 수집 실패";
+  }
+  if (message.includes("ERR_03") || message.includes("조회된 데이터가 없습니다")) {
+    return "공공 API 응답 데이터 없음";
+  }
+  if (message.includes("timeout") || message.includes("Timeout")) {
+    return "공공 API 응답 시간 초과";
+  }
+  return message
+    .replace(/([?&](?:serviceKey|service_key|key|token)=)[^&\s]+/gi, "$1[REDACTED]")
+    .slice(0, 160);
 }
 
 function changeColor(type) {
@@ -67,6 +96,14 @@ function zoneTypeInfo(code) {
     color: "#707985",
     fillOpacity: 0.08,
   };
+}
+
+function currentLayerKey(code) {
+  const normalized = String(code || "").trim();
+  if (normalized === "1") return "currentChild";
+  if (normalized === "2") return "currentSenior";
+  if (normalized === "3") return "currentDisabled";
+  return "currentOther";
 }
 
 function summarizeNames(names) {
@@ -325,6 +362,13 @@ function renderOverview(overview) {
           수집 ${numberText(run.fetched_count)}건 · Polygon 변경 ${numberText(
             polygonChanges,
           )}건 · Point 변경 ${numberText(pointChanges)}건<br>
+          ${
+            run.status !== "SUCCESS" && run.error_message
+              ? `<span class="run-error">실패 사유: ${escapeHtml(
+                  runFailureReason(run.error_message),
+                )}</span><br>`
+              : ""
+          }
           ${run.run_id}
         </div>
       `;
@@ -405,51 +449,59 @@ function renderEvents() {
 }
 
 function addCurrentZones(geojson) {
-  const layer = L.geoJSON(geojson, {
-    style: (feature) => {
-      const zoneType = zoneTypeInfo(feature.properties?.facility_type_code);
-      return {
-      color: zoneType.color,
-      weight: 1.6,
-      opacity: 0.8,
-      fillColor: zoneType.color,
-      fillOpacity: zoneType.fillOpacity,
-      };
-    },
-    onEachFeature: (feature, itemLayer) => {
-      const props = enrichReviewProperties({
-        layer_type: "Polygon",
-        ...(feature.properties || {}),
-      });
-      feature.properties = props;
-      itemLayer.bindPopup(popupContent(props));
-    },
-  });
-  layer.addTo(layerGroups.current);
-  return layer;
+  return Object.keys(layerGroups)
+    .filter((key) => key.startsWith("current"))
+    .map((key) =>
+      L.geoJSON(geojson, {
+        filter: (feature) => currentLayerKey(feature.properties?.facility_type_code) === key,
+        style: (feature) => {
+          const zoneType = zoneTypeInfo(feature.properties?.facility_type_code);
+          return {
+            color: zoneType.color,
+            weight: 1.6,
+            opacity: 0.8,
+            fillColor: zoneType.color,
+            fillOpacity: zoneType.fillOpacity,
+          };
+        },
+        onEachFeature: (feature, itemLayer) => {
+          const props = enrichReviewProperties({
+            layer_type: "Polygon",
+            ...(feature.properties || {}),
+          });
+          feature.properties = props;
+          itemLayer.bindPopup(popupContent(props));
+        },
+      }).addTo(layerGroups[key]),
+    );
 }
 
 function addCurrentPoints(geojson) {
-  return L.geoJSON(geojson, {
-    pointToLayer: (feature, latlng) => {
-      const zoneType = zoneTypeInfo(feature.properties?.facility_type_code);
-      return L.circleMarker(latlng, {
-        radius: 4,
-        color: "#ffffff",
-        weight: 1,
-        fillColor: zoneType.color,
-        fillOpacity: 0.9,
-      });
-    },
-    onEachFeature: (feature, itemLayer) => {
-      const props = enrichReviewProperties({
-        layer_type: "Point",
-        ...(feature.properties || {}),
-      });
-      feature.properties = props;
-      itemLayer.bindPopup(popupContent(props));
-    },
-  }).addTo(layerGroups.current);
+  return Object.keys(layerGroups)
+    .filter((key) => key.startsWith("current"))
+    .map((key) =>
+      L.geoJSON(geojson, {
+        filter: (feature) => currentLayerKey(feature.properties?.facility_type_code) === key,
+        pointToLayer: (feature, latlng) => {
+          const zoneType = zoneTypeInfo(feature.properties?.facility_type_code);
+          return L.circleMarker(latlng, {
+            radius: 4,
+            color: "#ffffff",
+            weight: 1,
+            fillColor: zoneType.color,
+            fillOpacity: 0.9,
+          });
+        },
+        onEachFeature: (feature, itemLayer) => {
+          const props = enrichReviewProperties({
+            layer_type: "Point",
+            ...(feature.properties || {}),
+          });
+          feature.properties = props;
+          itemLayer.bindPopup(popupContent(props));
+        },
+      }).addTo(layerGroups[key]),
+    );
 }
 
 function addChangeLayer(geojson) {
@@ -556,9 +608,10 @@ async function main() {
   addChangeLayer(changePoints);
   renderEvents();
 
-  const allLayers = L.featureGroup([
-    ...Object.values(layerGroups).flatMap((group) => Object.values(group._layers)),
-  ]);
+  const allMapLayers = Object.values(layerGroups)
+    .flatMap((group) => Object.values(group._layers))
+    .filter((layer) => !layer.getLayers || layer.getLayers().length > 0);
+  const allLayers = L.featureGroup(allMapLayers);
   if (allLayers.getLayers().length) {
     map.fitBounds(allLayers.getBounds().pad(0.1));
   }

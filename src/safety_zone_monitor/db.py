@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from dataclasses import dataclass
 from importlib.resources import files
@@ -22,6 +23,16 @@ from safety_zone_monitor.diff import (
 from safety_zone_monitor.normalize import FacilityPointRecord, ZoneRecord, clean_text, stable_hash
 
 DEFAULT_DASHBOARD_BASELINE_DATE = "2026-07-07"
+SENSITIVE_QUERY_PARAM_PATTERN = re.compile(
+    r"([?&](?:serviceKey|service_key|key|token)=)[^&\s]+",
+    re.IGNORECASE,
+)
+
+
+def sanitize_error_message(message: str | None) -> str | None:
+    if not message:
+        return message
+    return SENSITIVE_QUERY_PARAM_PATTERN.sub(r"\1[REDACTED]", message)
 
 
 @dataclass(frozen=True)
@@ -902,7 +913,7 @@ class Repository:
                         "deleted": row[15],
                         "missing": row[16],
                     },
-                    "error_message": row[17],
+                    "error_message": sanitize_error_message(row[17]),
                     "notification_sent_at": row[18].isoformat() if row[18] else None,
                 }
                 for row in run_rows
