@@ -568,17 +568,136 @@ input[type="checkbox"] {
 
 @media (max-width: 900px) {
   .app-shell {
-    grid-template-columns: 1fr;
-    grid-template-rows: 48vh 52vh;
+    display: block;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
   }
 
   .side-panel {
-    order: 2;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 900;
+    gap: 12px;
+    max-height: min(58vh, 560px);
+    padding: 18px 18px calc(18px + env(safe-area-inset-bottom));
+    overflow: auto;
     border-top: 1px solid var(--line);
     border-right: 0;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -12px 36px rgba(31, 41, 51, 0.2);
   }
 
   .map-panel {
-    order: 1;
+    height: 100%;
+  }
+
+  .panel-header h1 {
+    margin-bottom: 4px;
+    font-size: 24px;
+  }
+
+  .metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .metric {
+    min-height: 72px;
+    padding: 10px;
+  }
+
+  .metric strong {
+    font-size: 23px;
+  }
+
+  .toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .toolbar label,
+  .activity-tab {
+    min-height: 40px;
+  }
+
+  .activity-shell {
+    overflow: visible;
+  }
+
+  .activity-panel {
+    min-height: 260px;
+  }
+
+  .event-list,
+  .run-list {
+    max-height: 40vh;
+  }
+
+  .legend {
+    top: calc(12px + env(safe-area-inset-top));
+    right: 12px;
+    bottom: auto;
+    grid-template-columns: repeat(2, max-content);
+    padding: 10px;
+  }
+
+  .leaflet-control-zoom {
+    margin-top: calc(10px + env(safe-area-inset-top));
+  }
+}
+
+@media (max-width: 520px) {
+  .side-panel {
+    max-height: 52vh;
+    padding: 16px 14px calc(16px + env(safe-area-inset-bottom));
+  }
+
+  .panel-header h1 {
+    font-size: 23px;
+  }
+
+  .eyebrow,
+  .muted {
+    font-size: 12px;
+  }
+
+  .metrics {
+    gap: 8px;
+  }
+
+  .metric {
+    min-height: 66px;
+    padding: 9px;
+  }
+
+  .metric strong {
+    margin-top: 6px;
+    font-size: 22px;
+  }
+
+  .toolbar label {
+    padding: 8px;
+  }
+
+  input[type="checkbox"] {
+    width: 17px;
+    height: 17px;
+  }
+
+  .activity-tabs {
+    gap: 6px;
+  }
+
+  .activity-tab {
+    padding: 8px 10px;
+  }
+
+  .legend {
+    max-width: calc(100vw - 78px);
+    grid-template-columns: repeat(2, max-content);
+    gap: 6px 10px;
+    font-size: 11px;
   }
 }
