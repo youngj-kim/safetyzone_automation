@@ -1,0 +1,196 @@
+{
+  "timelines": [
+    {
+      "entity_key": "Polygon:113501010347",
+      "layer_type": "Polygon",
+      "source_manage_no": "113501010347",
+      "zone_group_id": "113501010347",
+      "facility_name": "태릉초등학교",
+      "sgg_code": "11350",
+      "events": [
+        {
+          "layer_type": "Polygon",
+          "event_id": 1587,
+          "run_id": "72623c78-c925-4e8b-b2f5-74b63891feb0",
+          "change_type": "ATTRIBUTE_CHANGED",
+          "facility_name": "태릉초등학교",
+          "source_manage_no": "113501010347",
+          "zone_group_id": "113501010347",
+          "sgg_code": "11350",
+          "api_first_registered_on": "1995-01-01",
+          "api_last_modified_on": null,
+          "detected_at": "2026-07-23T00:02:17.735964+00:00"
+        }
+      ],
+      "latest_change_type": "ATTRIBUTE_CHANGED",
+      "latest_detected_at": "2026-07-23T00:02:17.735964+00:00",
+      "missing_streak": 0,
+      "status_hint": "UPDATED"
+    },
+    {
+      "entity_key": "Polygon:113501010426",
+      "layer_type": "Polygon",
+      "source_manage_no": "113501010426",
+      "zone_group_id": null,
+      "facility_name": "키즈위즈유치원",
+      "sgg_code": "11350",
+      "events": [
+        {
+          "layer_type": "Polygon",
+          "event_id": 1588,
+          "run_id": "72623c78-c925-4e8b-b2f5-74b63891feb0",
+          "change_type": "DELETED",
+          "facility_name": "키즈위즈유치원",
+          "source_manage_no": "113501010426",
+          "zone_group_id": null,
+          "sgg_code": "11350",
+          "api_first_registered_on": null,
+          "api_last_modified_on": null,
+          "detected_at": "2026-07-23T00:02:17.735964+00:00"
+        }
+      ],
+      "latest_change_type": "DELETED",
+      "latest_detected_at": "2026-07-23T00:02:17.735964+00:00",
+      "missing_streak": 0,
+      "status_hint": "DELETED_CONFIRMED"
+    },
+    {
+      "entity_key": "Point:113501010347",
+      "layer_type": "Point",
+      "source_manage_no": "113501010347",
+      "zone_group_id": "113501010347",
+      "facility_name": "태릉초등학교",
+      "sgg_code": "11350",
+      "events": [
+        {
+          "layer_type": "Point",
+          "event_id": 1812,
+          "run_id": "72623c78-c925-4e8b-b2f5-74b63891feb0",
+          "change_type": "ATTRIBUTE_CHANGED",
+          "facility_name": "태릉초등학교",
+          "source_manage_no": "113501010347",
+          "zone_group_id": "113501010347",
+          "sgg_code": "11350",
+          "api_first_registered_on": "1995-01-01",
+          "api_last_modified_on": null,
+          "detected_at": "2026-07-23T00:02:17.735964+00:00"
+        }
+      ],
+      "latest_change_type": "ATTRIBUTE_CHANGED",
+      "latest_detected_at": "2026-07-23T00:02:17.735964+00:00",
+      "missing_streak": 0,
+      "status_hint": "UPDATED"
+    },
+    {
+      "entity_key": "Point:113501010426",
+      "layer_type": "Point",
+      "source_manage_no": "113501010426",
+      "zone_group_id": "113501010426",
+      "facility_name": "키즈위즈유치원",
+      "sgg_code": "11350",
+      "events": [
+        {
+          "layer_type": "Point",
+          "event_id": 1813,
+          "run_id": "72623c78-c925-4e8b-b2f5-74b63891feb0",
+          "change_type": "MISSING",
+          "facility_name": "키즈위즈유치원",
+          "source_manage_no": "113501010426",
+          "zone_group_id": "113501010426",
+          "sgg_code": "11350",
+          "api_first_registered_on": null,
+          "api_last_modified_on": null,
+          "detected_at": "2026-07-23T00:02:17.735964+00:00"
+        }
+      ],
+      "latest_change_type": "MISSING",
+      "latest_detected_at": "2026-07-23T00:02:17.735964+00:00",
+      "missing_streak": 1,
+      "status_hint": "DELETED_CONFIRMED",
+      "absence": {
+        "facility_id": "0dce5424ccfae90324ddc17015d5fa3f68e52bde5b18cbd96d72dfb82c4a68bc",
+        "point_ordinal": 1,
+        "first_missing_run_id": "72623c78-c925-4e8b-b2f5-74b63891feb0",
+        "first_missing_at": "2026-07-23T00:02:17.735964+00:00",
+        "last_missing_run_id": "72623c78-c925-4e8b-b2f5-74b63891feb0",
+        "last_missing_at": "2026-07-23T00:02:17.735964+00:00",
+        "missing_streak": 1,
+        "last_change_type": "MISSING"
+      }
+    },
+    {
+      "entity_key": "Point:113501010422",
+      "layer_type": "Point",
+      "source_manage_no": "113501010422",
+      "zone_group_id": "113501010424",
+      "facility_name": "상원유치원",
+      "sgg_code": "11350",
+      "events": [
+        {
+          "layer_type": "Point",
+          "event_id": 1814,
+          "run_id": "72623c78-c925-4e8b-b2f5-74b63891feb0",
+          "change_type": "MISSING",
+          "facility_name": "상원유치원",
+          "source_manage_no": "113501010422",
+          "zone_group_id": "113501010424",
+          "sgg_code": "11350",
+          "api_first_registered_on": "1998-01-01",
+          "api_last_modified_on": null,
+          "detected_at": "2026-07-23T00:02:17.735964+00:00"
+        }
+      ],
+      "latest_change_type": "MISSING",
+      "latest_detected_at": "2026-07-23T00:02:17.735964+00:00",
+      "missing_streak": 1,
+      "status_hint": "MISSING_REVIEW",
+      "absence": {
+        "facility_id": "60ead0763401cc91041e7786200271bf22a51b120f6a4cf09dc3519ddb7abf3e",
+        "point_ordinal": 1,
+        "first_missing_run_id": "72623c78-c925-4e8b-b2f5-74b63891feb0",
+        "first_missing_at": "2026-07-23T00:02:17.735964+00:00",
+        "last_missing_run_id": "72623c78-c925-4e8b-b2f5-74b63891feb0",
+        "last_missing_at": "2026-07-23T00:02:17.735964+00:00",
+        "missing_streak": 1,
+        "last_change_type": "MISSING"
+      }
+    },
+    {
+      "entity_key": "Point:113501024007",
+      "layer_type": "Point",
+      "source_manage_no": "113501024007",
+      "zone_group_id": "113501010347",
+      "facility_name": "미광유치원",
+      "sgg_code": "11350",
+      "events": [
+        {
+          "layer_type": "Point",
+          "event_id": 1815,
+          "run_id": "72623c78-c925-4e8b-b2f5-74b63891feb0",
+          "change_type": "MISSING",
+          "facility_name": "미광유치원",
+          "source_manage_no": "113501024007",
+          "zone_group_id": "113501010347",
+          "sgg_code": "11350",
+          "api_first_registered_on": null,
+          "api_last_modified_on": null,
+          "detected_at": "2026-07-23T00:02:17.735964+00:00"
+        }
+      ],
+      "latest_change_type": "MISSING",
+      "latest_detected_at": "2026-07-23T00:02:17.735964+00:00",
+      "missing_streak": 1,
+      "status_hint": "MISSING_REVIEW",
+      "absence": {
+        "facility_id": "d1352c17da3b9dca17486132696063d680660db89823a8e52520a727aa4d428f",
+        "point_ordinal": 1,
+        "first_missing_run_id": "72623c78-c925-4e8b-b2f5-74b63891feb0",
+        "first_missing_at": "2026-07-23T00:02:17.735964+00:00",
+        "last_missing_run_id": "72623c78-c925-4e8b-b2f5-74b63891feb0",
+        "last_missing_at": "2026-07-23T00:02:17.735964+00:00",
+        "missing_streak": 1,
+        "last_change_type": "MISSING"
+      }
+    }
+  ]
+}

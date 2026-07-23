@@ -3,9 +3,10 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+from pathlib import Path
 
 from safety_zone_monitor.config import Settings
-from safety_zone_monitor.db import Repository
+from safety_zone_monitor.db import DEFAULT_DASHBOARD_BASELINE_DATE, Repository
 from safety_zone_monitor.diff import ChangeType, PointChangeType
 from safety_zone_monitor.notify import Notifier
 from safety_zone_monitor.pipeline import run_pipeline
@@ -21,9 +22,31 @@ def _parser() -> argparse.ArgumentParser:
     subparsers.add_parser(
         "init-db", help="Add raw/analysis/ops monitoring objects to the existing mobility_db"
     )
-    subparsers.add_parser("run", help="Fetch, normalize, compare, store, and notify")
+    run_command = subparsers.add_parser(
+        "run",
+        help="Fetch, normalize, compare, store, and notify",
+    )
+    run_command.add_argument(
+        "--baseline",
+        action="store_true",
+        help="Load data into current/snapshots without creating change events or notifications",
+    )
     subparsers.add_parser(
         "quality-report", help="Read-only quality checks for current safety-zone data"
+    )
+    dashboard = subparsers.add_parser(
+        "export-dashboard",
+        help="Export dashboard JSON and GeoJSON files from the monitoring database",
+    )
+    dashboard.add_argument("--output", default="dashboard/data", help="Dashboard data directory")
+    dashboard.add_argument("--event-limit", type=int, default=500, help="Maximum events to export")
+    dashboard.add_argument(
+        "--baseline-date",
+        default=DEFAULT_DASHBOARD_BASELINE_DATE,
+        help=(
+            "Exclude NEW dashboard events detected on or before this KST date; "
+            "use an empty value to disable"
+        ),
     )
     subparsers.add_parser(
         "test-notification", help="Send a test Slack/Telegram message without touching DB data"
@@ -98,6 +121,16 @@ def main() -> None:
         if report["status"] != "PASS":
             raise SystemExit(1)
         return
+    if args.command == "export-dashboard":
+        output = Path(args.output)
+        baseline_date = args.baseline_date.strip() or None
+        repository.export_dashboard_data(
+            output,
+            event_limit=args.event_limit,
+            baseline_date=baseline_date,
+        )
+        print(f"Dashboard data exported to {output}.")
+        return
     if args.command == "build-link-candidates":
         if not settings.sgg_codes:
             raise RuntimeError("SGG_CODES or SGG_CODES_FILE is required")
@@ -150,7 +183,7 @@ def main() -> None:
         print("Notification test sent: " + ", ".join(sent))
         return
 
-    summary = run_pipeline(settings)
+    summary = run_pipeline(settings, record_events=not args.baseline)
     print(
         "Run complete: "
         f"NEW={summary.diff.count(ChangeType.NEW)} "
@@ -166,5 +199,6 @@ def main() -> None:
         f"POINT_BOTH_CHANGED="
         f"{summary.point_diff.count(PointChangeType.POINT_ATTRIBUTE_CHANGED)} "
         f"POINT_UNCHANGED={summary.point_diff.count(PointChangeType.UNCHANGED)} "
+        f"POINT_DELETED={summary.point_diff.count(PointChangeType.DELETED)} "
         f"POINT_MISSING={summary.point_diff.count(PointChangeType.MISSING)}"
     )

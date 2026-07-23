@@ -58,3 +58,13 @@ def test_detects_all_point_change_states() -> None:
     assert result.count(PointChangeType.POINT_ATTRIBUTE_CHANGED) == 1
     assert result.count(PointChangeType.UNCHANGED) == 1
     assert result.count(PointChangeType.MISSING) == 1
+
+
+def test_missing_point_is_deleted_when_zone_group_was_deleted() -> None:
+    deleted = point_record(ptznMngNo="F", rprsPtznMngNo="GROUP-1")
+    current = {(deleted.facility_id, deleted.point_ordinal): existing(deleted)}
+
+    result = detect_point_changes([], current, deleted_zone_group_ids={"GROUP-1"})
+
+    assert result.count(PointChangeType.DELETED) == 1
+    assert result.count(PointChangeType.MISSING) == 0

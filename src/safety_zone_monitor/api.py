@@ -53,6 +53,7 @@ class SafetyZoneApiClient:
         num_rows: int = 1000,
         timeout_seconds: float = 30.0,
         delay_seconds: float = 0.2,
+        allow_empty_result: bool = False,
         session: requests.Session | None = None,
     ) -> None:
         self.base_url = base_url
@@ -60,6 +61,7 @@ class SafetyZoneApiClient:
         self.num_rows = num_rows
         self.timeout_seconds = timeout_seconds
         self.delay_seconds = delay_seconds
+        self.allow_empty_result = allow_empty_result
         self.session = session or requests.Session()
         if session is None:
             retry = Retry(
@@ -94,7 +96,17 @@ class SafetyZoneApiClient:
             raise ApiError(f"Failed to fetch {sgg_code} page {page_no}: {exc}") from exc
         if not isinstance(payload, Mapping):
             raise ApiError(f"Unexpected response type for {sgg_code} page {page_no}")
-        return response_body(payload)
+        try:
+            return response_body(payload)
+        except ApiError as exc:
+            if self.allow_empty_result and "ERR_03" in str(exc):
+                logger.info("Fetched district=%s page=%s/0 items=0", sgg_code, page_no)
+                return {
+                    "totalCount": 0,
+                    "numOfRows": self.num_rows,
+                    "items": {"item": []},
+                }
+            raise
 
     def fetch_district(self, sgg_code: str) -> list[dict[str, Any]]:
         records: list[dict[str, Any]] = []

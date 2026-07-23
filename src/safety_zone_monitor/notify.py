@@ -29,6 +29,7 @@ def format_summary(summary: RunSummary) -> str:
             f"속성변경 {summary.point_diff.count(PointChangeType.ATTRIBUTE_CHANGED)} / "
             f"위치+속성변경 "
             f"{summary.point_diff.count(PointChangeType.POINT_ATTRIBUTE_CHANGED)} / "
+            f"삭제 {summary.point_diff.count(PointChangeType.DELETED)} / "
             f"누락 {summary.point_diff.count(PointChangeType.MISSING)} / "
             f"동일 {summary.point_diff.count(PointChangeType.UNCHANGED)}"
         ),

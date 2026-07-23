@@ -60,6 +60,7 @@ class PointChangeType(StrEnum):
     ATTRIBUTE_CHANGED = "ATTRIBUTE_CHANGED"
     POINT_ATTRIBUTE_CHANGED = "POINT_ATTRIBUTE_CHANGED"
     UNCHANGED = "UNCHANGED"
+    DELETED = "DELETED"
     MISSING = "MISSING"
 
 
@@ -194,7 +195,9 @@ def _updated_point_change_type(
 def detect_point_changes(
     incoming: list[FacilityPointRecord],
     current: dict[tuple[str, int], ExistingFacilityPoint],
+    deleted_zone_group_ids: set[str] | None = None,
 ) -> PointDiffResult:
+    deleted_zone_group_ids = deleted_zone_group_ids or set()
     incoming_by_key = {
         (record.facility_id, record.point_ordinal): record for record in incoming
     }
@@ -242,12 +245,18 @@ def detect_point_changes(
 
     for key in sorted(set(current) - set(incoming_by_key)):
         existing = current[key]
+        zone_group_id = str(existing.snapshot.get("zone_group_id") or "")
+        change_type = (
+            PointChangeType.DELETED
+            if zone_group_id in deleted_zone_group_ids
+            else PointChangeType.MISSING
+        )
         changes.append(
             PointChange(
-                PointChangeType.MISSING,
+                change_type,
                 existing.facility_id,
                 existing.point_ordinal,
-                str(existing.snapshot.get("zone_group_id") or ""),
+                zone_group_id,
                 existing.attr_hash,
                 None,
                 existing.point_hash,

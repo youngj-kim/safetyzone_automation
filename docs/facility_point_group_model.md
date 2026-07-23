@@ -42,7 +42,8 @@ Point 전용 9건은 삭제 대상이 아니다. 예를 들어 `서울농학교`
 | `POINT_CHANGED` | 시설 위치만 변경 |
 | `ATTRIBUTE_CHANGED` | 시설명·주소·그룹 등 속성만 변경 |
 | `POINT_ATTRIBUTE_CHANGED` | 위치와 속성이 함께 변경 |
-| `MISSING` | 이번 수집 범위에서 사라지거나 비활성화 |
+| `DELETED` | 같은 그룹의 Polygon 삭제와 함께 사라진 Point |
+| `MISSING` | Polygon 삭제 근거 없이 이번 수집 범위에서 사라진 검토 대상 |
 
 `UNCHANGED`는 이벤트 행을 만들지 않고 `ops.pipeline_run.point_unchanged_count`에만
 집계한다. Polygon 또는 Point 중 하나라도 변경되면 통합 알림 대상이 된다.

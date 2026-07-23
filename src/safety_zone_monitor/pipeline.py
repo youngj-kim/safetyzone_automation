@@ -47,7 +47,7 @@ def _verify_mobility_contract(repository: Repository) -> None:
         raise RuntimeError("mobility.std_link must exist with SRID 5179")
 
 
-def run_pipeline(settings: Settings) -> RunSummary:
+def run_pipeline(settings: Settings, *, record_events: bool = True) -> RunSummary:
     repository = Repository(settings.database_url)
     _verify_mobility_contract(repository)
     repository.migrate()
@@ -59,12 +59,14 @@ def run_pipeline(settings: Settings) -> RunSummary:
             num_rows=settings.num_rows,
             timeout_seconds=settings.timeout_seconds,
             delay_seconds=settings.request_delay_seconds,
+            allow_empty_result=not record_events,
         )
         raw_items = client.fetch_all(settings.sgg_codes)
         normalized = normalize_records(raw_items)
 
         # Never interpret an empty district response as a legitimate mass deletion.
-        _validate_response_coverage(raw_items, settings.sgg_codes)
+        if record_events:
+            _validate_response_coverage(raw_items, settings.sgg_codes)
 
         summary = repository.apply_run(
             run_id=run_id,
@@ -75,6 +77,7 @@ def run_pipeline(settings: Settings) -> RunSummary:
             skipped_non_polygon_count=normalized.skipped_non_polygon_count,
             skipped_inactive_count=normalized.skipped_inactive_count,
             point_only_record_count=normalized.point_only_record_count,
+            record_events=record_events,
         )
     except Exception as exc:
         repository.mark_failed(run_id, exc)
@@ -85,7 +88,7 @@ def run_pipeline(settings: Settings) -> RunSummary:
         telegram_bot_token=settings.telegram_bot_token,
         telegram_chat_id=settings.telegram_chat_id,
     )
-    if summary.has_changes:
+    if record_events and summary.has_changes:
         if notifier.configured:
             payload = {
                 "change_count": summary.change_count,

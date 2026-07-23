@@ -27,4 +27,5 @@ def test_point_only_change_is_in_notification_summary() -> None:
     assert summary.has_changes is True
     assert summary.change_count == 1
     assert "[시설 Point]" in message
+    assert "삭제 0 / 누락 0" in message
     assert "Point NEW: Point-only facility (11110)" in message

@@ -2,6 +2,7 @@ ALTER TABLE ops.pipeline_run
     ADD COLUMN IF NOT EXISTS point_new_count integer NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS point_changed_count integer NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS point_unchanged_count integer NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS point_deleted_count integer NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS point_missing_count integer NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS analysis.zone_facility_point_change_event (
@@ -16,6 +17,7 @@ CREATE TABLE IF NOT EXISTS analysis.zone_facility_point_change_event (
             'POINT_CHANGED',
             'ATTRIBUTE_CHANGED',
             'POINT_ATTRIBUTE_CHANGED',
+            'DELETED',
             'MISSING'
         )
     ),

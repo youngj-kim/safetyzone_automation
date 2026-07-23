@@ -1,0 +1,82 @@
+{
+  "events": [
+    {
+      "layer_type": "Polygon",
+      "event_id": 1587,
+      "run_id": "72623c78-c925-4e8b-b2f5-74b63891feb0",
+      "change_type": "ATTRIBUTE_CHANGED",
+      "facility_name": "태릉초등학교",
+      "source_manage_no": "113501010347",
+      "sgg_code": "11350",
+      "zone_group_id": "113501010347",
+      "api_first_registered_on": "1995-01-01",
+      "api_last_modified_on": null,
+      "detected_at": "2026-07-23T00:02:17.735964+00:00"
+    },
+    {
+      "layer_type": "Polygon",
+      "event_id": 1588,
+      "run_id": "72623c78-c925-4e8b-b2f5-74b63891feb0",
+      "change_type": "DELETED",
+      "facility_name": "키즈위즈유치원",
+      "source_manage_no": "113501010426",
+      "sgg_code": "11350",
+      "zone_group_id": null,
+      "api_first_registered_on": null,
+      "api_last_modified_on": null,
+      "detected_at": "2026-07-23T00:02:17.735964+00:00"
+    },
+    {
+      "layer_type": "Point",
+      "event_id": 1812,
+      "run_id": "72623c78-c925-4e8b-b2f5-74b63891feb0",
+      "change_type": "ATTRIBUTE_CHANGED",
+      "facility_name": "태릉초등학교",
+      "source_manage_no": "113501010347",
+      "sgg_code": "11350",
+      "zone_group_id": "113501010347",
+      "api_first_registered_on": "1995-01-01",
+      "api_last_modified_on": null,
+      "detected_at": "2026-07-23T00:02:17.735964+00:00"
+    },
+    {
+      "layer_type": "Point",
+      "event_id": 1813,
+      "run_id": "72623c78-c925-4e8b-b2f5-74b63891feb0",
+      "change_type": "MISSING",
+      "facility_name": "키즈위즈유치원",
+      "source_manage_no": "113501010426",
+      "sgg_code": "11350",
+      "zone_group_id": "113501010426",
+      "api_first_registered_on": null,
+      "api_last_modified_on": null,
+      "detected_at": "2026-07-23T00:02:17.735964+00:00"
+    },
+    {
+      "layer_type": "Point",
+      "event_id": 1814,
+      "run_id": "72623c78-c925-4e8b-b2f5-74b63891feb0",
+      "change_type": "MISSING",
+      "facility_name": "상원유치원",
+      "source_manage_no": "113501010422",
+      "sgg_code": "11350",
+      "zone_group_id": "113501010424",
+      "api_first_registered_on": "1998-01-01",
+      "api_last_modified_on": null,
+      "detected_at": "2026-07-23T00:02:17.735964+00:00"
+    },
+    {
+      "layer_type": "Point",
+      "event_id": 1815,
+      "run_id": "72623c78-c925-4e8b-b2f5-74b63891feb0",
+      "change_type": "MISSING",
+      "facility_name": "미광유치원",
+      "source_manage_no": "113501024007",
+      "sgg_code": "11350",
+      "zone_group_id": "113501010347",
+      "api_first_registered_on": null,
+      "api_last_modified_on": null,
+      "detected_at": "2026-07-23T00:02:17.735964+00:00"
+    }
+  ]
+}

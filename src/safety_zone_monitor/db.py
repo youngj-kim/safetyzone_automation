@@ -4,6 +4,7 @@ import json
 import uuid
 from dataclasses import dataclass
 from importlib.resources import files
+from pathlib import Path
 from typing import Any
 
 import psycopg
@@ -19,6 +20,8 @@ from safety_zone_monitor.diff import (
     detect_point_changes,
 )
 from safety_zone_monitor.normalize import FacilityPointRecord, ZoneRecord, clean_text, stable_hash
+
+DEFAULT_DASHBOARD_BASELINE_DATE = "2026-07-07"
 
 
 @dataclass(frozen=True)
@@ -373,6 +376,7 @@ class Repository:
         skipped_non_polygon_count: int,
         skipped_inactive_count: int,
         point_only_record_count: int,
+        record_events: bool = True,
     ) -> RunSummary:
         incoming_sgg_codes = {record.sgg_code for record in records} | {
             record.sgg_code for record in facility_points
@@ -458,7 +462,16 @@ class Repository:
             current = self._load_current(connection, sgg_codes)
             diff = detect_changes(records, current)
             current_points = self._load_current_points(connection, sgg_codes)
-            point_diff = detect_point_changes(facility_points, current_points)
+            deleted_zone_group_ids = {
+                str(change.old_snapshot.get("zone_group_id") or "")
+                for change in diff.changes
+                if change.change_type is ChangeType.DELETED and change.old_snapshot is not None
+            }
+            point_diff = detect_point_changes(
+                facility_points,
+                current_points,
+                deleted_zone_group_ids=deleted_zone_group_ids,
+            )
             event_rows = [
                 (
                     run_id,
@@ -479,7 +492,7 @@ class Repository:
                 )
                 for change in diff.changes
             ]
-            if event_rows:
+            if record_events and event_rows:
                 with connection.cursor() as cursor:
                     cursor.executemany(
                         "INSERT INTO analysis.zone_change_event "
@@ -512,7 +525,7 @@ class Repository:
                 )
                 for change in point_diff.changes
             ]
-            if point_event_rows:
+            if record_events and point_event_rows:
                 with connection.cursor() as cursor:
                     cursor.executemany(
                         "INSERT INTO analysis.zone_facility_point_change_event "
@@ -523,6 +536,67 @@ class Repository:
                         "%s::jsonb, %s::jsonb)",
                         point_event_rows,
                     )
+
+            if facility_points:
+                with connection.cursor() as cursor:
+                    cursor.executemany(
+                        "DELETE FROM analysis.zone_facility_point_absence "
+                        "WHERE facility_id = %s AND point_ordinal = %s",
+                        [
+                            (point.facility_id, point.point_ordinal)
+                            for point in facility_points
+                        ],
+                    )
+
+            point_absence_rows = [
+                (
+                    change.facility_id,
+                    change.point_ordinal,
+                    change.zone_group_id,
+                    (change.old_snapshot or {}).get("source_manage_no"),
+                    (change.old_snapshot or {}).get("facility_name"),
+                    (change.old_snapshot or {}).get("sgg_code"),
+                    run_id,
+                    run_id,
+                    change.change_type.value,
+                    json.dumps(change.old_snapshot, ensure_ascii=False)
+                    if change.old_snapshot is not None
+                    else None,
+                )
+                for change in point_diff.changes
+                if change.change_type in (PointChangeType.DELETED, PointChangeType.MISSING)
+            ]
+            if record_events and point_absence_rows:
+                with connection.cursor() as cursor:
+                    cursor.executemany(
+                        "INSERT INTO analysis.zone_facility_point_absence "
+                        "(facility_id, point_ordinal, zone_group_id, source_manage_no, "
+                        "facility_name, sgg_code, first_missing_run_id, last_missing_run_id, "
+                        "last_change_type, old_snapshot) VALUES "
+                        "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb) "
+                        "ON CONFLICT (facility_id, point_ordinal) DO UPDATE SET "
+                        "zone_group_id = EXCLUDED.zone_group_id, "
+                        "source_manage_no = EXCLUDED.source_manage_no, "
+                        "facility_name = EXCLUDED.facility_name, "
+                        "sgg_code = EXCLUDED.sgg_code, "
+                        "last_missing_run_id = EXCLUDED.last_missing_run_id, "
+                        "last_missing_at = now(), "
+                        "missing_streak = analysis.zone_facility_point_absence.missing_streak + 1, "
+                        "last_change_type = EXCLUDED.last_change_type, "
+                        "old_snapshot = EXCLUDED.old_snapshot",
+                        point_absence_rows,
+                    )
+
+            if record_events:
+                connection.execute(
+                    "UPDATE analysis.zone_facility_point_absence "
+                    "SET last_missing_run_id = %s, last_missing_at = now(), "
+                    "missing_streak = missing_streak + 1 "
+                    "WHERE sgg_code = ANY(%s) "
+                    "AND last_change_type = 'MISSING' "
+                    "AND last_missing_run_id <> %s",
+                    (run_id, list(sgg_codes), run_id),
+                )
 
             upsert_sql = """
                 INSERT INTO analysis.zone_current (
@@ -619,7 +693,7 @@ class Repository:
             missing_point_keys = [
                 (change.facility_id, change.point_ordinal)
                 for change in point_diff.changes
-                if change.change_type is PointChangeType.MISSING
+                if change.change_type in (PointChangeType.DELETED, PointChangeType.MISSING)
             ]
             if missing_point_keys:
                 with connection.cursor() as cursor:
@@ -640,6 +714,8 @@ class Repository:
                     (deleted_ids,),
                 )
 
+            summary_diff = diff if record_events else DiffResult((), ())
+            summary_point_diff = point_diff if record_events else PointDiffResult((), ())
             metrics = (
                 len(raw_items),
                 len(records),
@@ -647,23 +723,24 @@ class Repository:
                 point_only_record_count,
                 skipped_non_polygon_count,
                 skipped_inactive_count,
-                diff.count(ChangeType.NEW),
-                diff.count(ChangeType.GEOMETRY_CHANGED),
-                diff.count(ChangeType.ATTRIBUTE_CHANGED),
-                diff.count(ChangeType.GEOMETRY_ATTRIBUTE_CHANGED),
-                diff.count(ChangeType.UNCHANGED),
-                diff.count(ChangeType.DELETED),
-                point_diff.count(PointChangeType.NEW),
+                summary_diff.count(ChangeType.NEW),
+                summary_diff.count(ChangeType.GEOMETRY_CHANGED),
+                summary_diff.count(ChangeType.ATTRIBUTE_CHANGED),
+                summary_diff.count(ChangeType.GEOMETRY_ATTRIBUTE_CHANGED),
+                summary_diff.count(ChangeType.UNCHANGED),
+                summary_diff.count(ChangeType.DELETED),
+                summary_point_diff.count(PointChangeType.NEW),
                 sum(
-                    point_diff.count(change_type)
+                    summary_point_diff.count(change_type)
                     for change_type in (
                         PointChangeType.POINT_CHANGED,
                         PointChangeType.ATTRIBUTE_CHANGED,
                         PointChangeType.POINT_ATTRIBUTE_CHANGED,
                     )
                 ),
-                point_diff.count(PointChangeType.UNCHANGED),
-                point_diff.count(PointChangeType.MISSING),
+                summary_point_diff.count(PointChangeType.UNCHANGED),
+                summary_point_diff.count(PointChangeType.DELETED),
+                summary_point_diff.count(PointChangeType.MISSING),
                 run_id,
             )
             connection.execute(
@@ -677,7 +754,8 @@ class Repository:
                     attribute_changed_count = %s, geometry_attribute_changed_count = %s,
                     unchanged_count = %s, deleted_count = %s,
                     point_new_count = %s, point_changed_count = %s,
-                    point_unchanged_count = %s, point_missing_count = %s
+                    point_unchanged_count = %s, point_deleted_count = %s,
+                    point_missing_count = %s
                 WHERE pipeline_run_id = %s
                 """,
                 metrics,
@@ -696,8 +774,8 @@ class Repository:
             point_only_record_count=point_only_record_count,
             skipped_non_polygon_count=skipped_non_polygon_count,
             skipped_inactive_count=skipped_inactive_count,
-            diff=diff,
-            point_diff=point_diff,
+            diff=summary_diff,
+            point_diff=summary_point_diff,
         )
 
     def record_notification(
@@ -728,6 +806,749 @@ class Repository:
                 "UPDATE ops.pipeline_run SET notification_sent_at = now() "
                 "WHERE pipeline_run_id = %s",
                 (run_id,),
+            )
+
+    def dashboard_overview(self, *, recent_run_limit: int = 20) -> dict[str, Any]:
+        with self._connect() as connection:
+            connection.execute("SET TRANSACTION READ ONLY")
+            has_point_deleted_count = connection.execute(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema = 'ops'
+                      AND table_name = 'pipeline_run'
+                      AND column_name = 'point_deleted_count'
+                )
+                """
+            ).fetchone()[0]
+            point_deleted_count_sql = (
+                "point_deleted_count"
+                if has_point_deleted_count
+                else "0 AS point_deleted_count"
+            )
+            counts = connection.execute(
+                """
+                SELECT
+                    (SELECT COUNT(*)::integer FROM analysis.zone_current) AS polygons,
+                    (SELECT COUNT(*)::integer FROM analysis.zone_facility_point_current)
+                        AS facility_points,
+                    (
+                        SELECT COUNT(DISTINCT sgg_code)::integer
+                        FROM (
+                            SELECT sgg_code FROM analysis.zone_current
+                            UNION ALL
+                            SELECT sgg_code FROM analysis.zone_facility_point_current
+                        ) AS scope
+                    ) AS sgg_codes
+                """
+            ).fetchone()
+            run_rows = connection.execute(
+                """
+                SELECT
+                    pipeline_run_id,
+                    started_at,
+                    finished_at,
+                    status,
+                    monitored_sgg_codes,
+                    fetched_count,
+                    polygon_count,
+                    facility_point_count,
+                    new_count,
+                    geometry_changed_count,
+                    attribute_changed_count,
+                    geometry_attribute_changed_count,
+                    deleted_count,
+                    point_new_count,
+                    point_changed_count,
+                    """ + point_deleted_count_sql + """,
+                    point_missing_count,
+                    error_message,
+                    notification_sent_at
+                FROM ops.pipeline_run
+                ORDER BY started_at DESC
+                LIMIT %s
+                """,
+                (recent_run_limit,),
+            ).fetchall()
+            connection.rollback()
+
+        return {
+            "current_counts": {
+                "polygons": counts[0],
+                "facility_points": counts[1],
+                "sgg_codes": counts[2],
+            },
+            "recent_runs": [
+                {
+                    "run_id": str(row[0]),
+                    "started_at": row[1].isoformat() if row[1] else None,
+                    "finished_at": row[2].isoformat() if row[2] else None,
+                    "status": row[3],
+                    "monitored_sgg_codes": row[4],
+                    "fetched_count": row[5],
+                    "polygon_count": row[6],
+                    "facility_point_count": row[7],
+                    "polygon_changes": {
+                        "new": row[8],
+                        "geometry_changed": row[9],
+                        "attribute_changed": row[10],
+                        "geometry_attribute_changed": row[11],
+                        "deleted": row[12],
+                    },
+                    "point_changes": {
+                        "new": row[13],
+                        "changed": row[14],
+                        "deleted": row[15],
+                        "missing": row[16],
+                    },
+                    "error_message": row[17],
+                    "notification_sent_at": row[18].isoformat() if row[18] else None,
+                }
+                for row in run_rows
+            ],
+        }
+
+    def dashboard_change_events(
+        self,
+        *,
+        limit: int = 500,
+        baseline_date: str | None = DEFAULT_DASHBOARD_BASELINE_DATE,
+    ) -> dict[str, Any]:
+        with self._connect() as connection:
+            connection.execute("SET TRANSACTION READ ONLY")
+            polygon_rows = connection.execute(
+                """
+                SELECT
+                    'Polygon' AS layer_type,
+                    event_id,
+                    run_id,
+                    change_type,
+                    COALESCE(new_snapshot ->> 'facility_name', old_snapshot ->> 'facility_name')
+                        AS facility_name,
+                    COALESCE(
+                        new_snapshot ->> 'source_manage_no',
+                        old_snapshot ->> 'source_manage_no'
+                    )
+                        AS source_manage_no,
+                    COALESCE(new_snapshot ->> 'sgg_code', old_snapshot ->> 'sgg_code')
+                        AS sgg_code,
+                    COALESCE(new_snapshot ->> 'zone_group_id', old_snapshot ->> 'zone_group_id')
+                        AS zone_group_id,
+                    COALESCE(
+                        new_snapshot ->> 'first_registered_on',
+                        old_snapshot ->> 'first_registered_on'
+                    )
+                        AS first_registered_on,
+                    COALESCE(
+                        new_snapshot ->> 'last_modified_on',
+                        old_snapshot ->> 'last_modified_on'
+                    )
+                        AS last_modified_on,
+                    detected_at
+                FROM analysis.zone_change_event
+                WHERE (%s::date IS NULL)
+                   OR NOT (
+                       change_type = 'NEW'
+                       AND (detected_at AT TIME ZONE 'Asia/Seoul')::date <= %s::date
+                   )
+                ORDER BY detected_at DESC
+                LIMIT %s
+                """,
+                (baseline_date, baseline_date, limit),
+            ).fetchall()
+            point_rows = connection.execute(
+                """
+                SELECT
+                    'Point' AS layer_type,
+                    event_id,
+                    run_id,
+                    change_type,
+                    COALESCE(new_snapshot ->> 'facility_name', old_snapshot ->> 'facility_name')
+                        AS facility_name,
+                    COALESCE(
+                        new_snapshot ->> 'source_manage_no',
+                        old_snapshot ->> 'source_manage_no'
+                    )
+                        AS source_manage_no,
+                    COALESCE(new_snapshot ->> 'sgg_code', old_snapshot ->> 'sgg_code')
+                        AS sgg_code,
+                    zone_group_id,
+                    COALESCE(
+                        new_snapshot ->> 'first_registered_on',
+                        old_snapshot ->> 'first_registered_on'
+                    )
+                        AS first_registered_on,
+                    COALESCE(
+                        new_snapshot ->> 'last_modified_on',
+                        old_snapshot ->> 'last_modified_on'
+                    )
+                        AS last_modified_on,
+                    detected_at
+                FROM analysis.zone_facility_point_change_event
+                WHERE (%s::date IS NULL)
+                   OR NOT (
+                       change_type = 'NEW'
+                       AND (detected_at AT TIME ZONE 'Asia/Seoul')::date <= %s::date
+                   )
+                ORDER BY detected_at DESC
+                LIMIT %s
+                """,
+                (baseline_date, baseline_date, limit),
+            ).fetchall()
+            connection.rollback()
+
+        rows = sorted(
+            [*polygon_rows, *point_rows],
+            key=lambda row: row[10],
+            reverse=True,
+        )[:limit]
+        return {
+            "events": [
+                {
+                    "layer_type": row[0],
+                    "event_id": row[1],
+                    "run_id": str(row[2]),
+                    "change_type": row[3],
+                    "facility_name": row[4],
+                    "source_manage_no": row[5],
+                    "sgg_code": row[6],
+                    "zone_group_id": row[7],
+                    "api_first_registered_on": row[8],
+                    "api_last_modified_on": row[9],
+                    "detected_at": row[10].isoformat() if row[10] else None,
+                }
+                for row in rows
+            ]
+        }
+
+    def dashboard_timelines(
+        self,
+        *,
+        limit: int = 1000,
+        baseline_date: str | None = DEFAULT_DASHBOARD_BASELINE_DATE,
+    ) -> dict[str, Any]:
+        with self._connect() as connection:
+            connection.execute("SET TRANSACTION READ ONLY")
+            polygon_rows = connection.execute(
+                """
+                SELECT
+                    'Polygon' AS layer_type,
+                    event_id,
+                    run_id,
+                    change_type,
+                    COALESCE(new_snapshot ->> 'facility_name', old_snapshot ->> 'facility_name')
+                        AS facility_name,
+                    COALESCE(
+                        new_snapshot ->> 'source_manage_no',
+                        old_snapshot ->> 'source_manage_no'
+                    )
+                        AS source_manage_no,
+                    COALESCE(new_snapshot ->> 'zone_group_id', old_snapshot ->> 'zone_group_id')
+                        AS zone_group_id,
+                    COALESCE(new_snapshot ->> 'sgg_code', old_snapshot ->> 'sgg_code')
+                        AS sgg_code,
+                    COALESCE(
+                        new_snapshot ->> 'first_registered_on',
+                        old_snapshot ->> 'first_registered_on'
+                    )
+                        AS first_registered_on,
+                    COALESCE(
+                        new_snapshot ->> 'last_modified_on',
+                        old_snapshot ->> 'last_modified_on'
+                    )
+                        AS last_modified_on,
+                    detected_at
+                FROM analysis.zone_change_event
+                WHERE (%s::date IS NULL)
+                   OR NOT (
+                       change_type = 'NEW'
+                       AND (detected_at AT TIME ZONE 'Asia/Seoul')::date <= %s::date
+                   )
+                ORDER BY detected_at DESC
+                LIMIT %s
+                """,
+                (baseline_date, baseline_date, limit),
+            ).fetchall()
+            point_rows = connection.execute(
+                """
+                SELECT
+                    'Point' AS layer_type,
+                    event_id,
+                    run_id,
+                    change_type,
+                    COALESCE(new_snapshot ->> 'facility_name', old_snapshot ->> 'facility_name')
+                        AS facility_name,
+                    COALESCE(
+                        new_snapshot ->> 'source_manage_no',
+                        old_snapshot ->> 'source_manage_no'
+                    )
+                        AS source_manage_no,
+                    zone_group_id,
+                    COALESCE(new_snapshot ->> 'sgg_code', old_snapshot ->> 'sgg_code')
+                        AS sgg_code,
+                    COALESCE(
+                        new_snapshot ->> 'first_registered_on',
+                        old_snapshot ->> 'first_registered_on'
+                    )
+                        AS first_registered_on,
+                    COALESCE(
+                        new_snapshot ->> 'last_modified_on',
+                        old_snapshot ->> 'last_modified_on'
+                    )
+                        AS last_modified_on,
+                    detected_at
+                FROM analysis.zone_facility_point_change_event
+                WHERE (%s::date IS NULL)
+                   OR NOT (
+                       change_type = 'NEW'
+                       AND (detected_at AT TIME ZONE 'Asia/Seoul')::date <= %s::date
+                   )
+                ORDER BY detected_at DESC
+                LIMIT %s
+                """,
+                (baseline_date, baseline_date, limit),
+            ).fetchall()
+            has_absence_table = connection.execute(
+                "SELECT to_regclass('analysis.zone_facility_point_absence') IS NOT NULL"
+            ).fetchone()[0]
+            absence_rows = []
+            if has_absence_table:
+                absence_rows = connection.execute(
+                    """
+                    SELECT
+                        facility_id::text,
+                        point_ordinal,
+                        zone_group_id,
+                        source_manage_no,
+                        facility_name,
+                        sgg_code,
+                        first_missing_run_id,
+                        first_missing_at,
+                        last_missing_run_id,
+                        last_missing_at,
+                        missing_streak,
+                        last_change_type
+                    FROM analysis.zone_facility_point_absence
+                    ORDER BY last_missing_at DESC
+                    LIMIT %s
+                    """,
+                    (limit,),
+                ).fetchall()
+            connection.rollback()
+
+        grouped: dict[str, dict[str, Any]] = {}
+        rows = sorted([*polygon_rows, *point_rows], key=lambda row: row[10], reverse=True)
+        for row in rows:
+            layer_type = row[0]
+            source_manage_no = row[5]
+            zone_group_id = row[6]
+            entity_id = source_manage_no or zone_group_id or str(row[1])
+            entity_key = f"{layer_type}:{entity_id}"
+            event = {
+                "layer_type": layer_type,
+                "event_id": row[1],
+                "run_id": str(row[2]),
+                "change_type": row[3],
+                "facility_name": row[4],
+                "source_manage_no": source_manage_no,
+                "zone_group_id": zone_group_id,
+                "sgg_code": row[7],
+                "api_first_registered_on": row[8],
+                "api_last_modified_on": row[9],
+                "detected_at": row[10].isoformat() if row[10] else None,
+            }
+            if entity_key not in grouped:
+                grouped[entity_key] = {
+                    "entity_key": entity_key,
+                    "layer_type": layer_type,
+                    "source_manage_no": source_manage_no,
+                    "zone_group_id": zone_group_id,
+                    "facility_name": row[4],
+                    "sgg_code": row[7],
+                    "events": [],
+                }
+            grouped[entity_key]["events"].append(event)
+
+        timelines = []
+        for timeline in grouped.values():
+            events = timeline["events"]
+            latest_type = events[0]["change_type"] if events else None
+            missing_streak = 0
+            for event in events:
+                if event["change_type"] != "MISSING":
+                    break
+                missing_streak += 1
+            had_missing = any(event["change_type"] == "MISSING" for event in events[1:])
+            if latest_type == "DELETED":
+                status_hint = "DELETED_CONFIRMED"
+            elif latest_type == "MISSING" and missing_streak >= 2:
+                status_hint = "DELETE_CANDIDATE"
+            elif latest_type == "MISSING":
+                status_hint = "MISSING_REVIEW"
+            elif latest_type and latest_type != "MISSING" and had_missing:
+                status_hint = "RETURNED"
+            elif latest_type == "NEW":
+                status_hint = "NEW"
+            elif latest_type:
+                status_hint = "UPDATED"
+            else:
+                status_hint = "CURRENT"
+
+            timeline["latest_change_type"] = latest_type
+            timeline["latest_detected_at"] = events[0]["detected_at"] if events else None
+            timeline["missing_streak"] = missing_streak
+            timeline["status_hint"] = status_hint
+            timelines.append(timeline)
+
+        for row in absence_rows:
+            source_manage_no = row[3]
+            zone_group_id = row[2]
+            entity_id = source_manage_no or zone_group_id or f"{row[0]}:{row[1]}"
+            entity_key = f"Point:{entity_id}"
+            timeline = grouped.get(entity_key)
+            if timeline is None:
+                timeline = {
+                    "entity_key": entity_key,
+                    "layer_type": "Point",
+                    "source_manage_no": source_manage_no,
+                    "zone_group_id": zone_group_id,
+                    "facility_name": row[4],
+                    "sgg_code": row[5],
+                    "events": [],
+                    "latest_change_type": row[11],
+                    "latest_detected_at": row[9].isoformat() if row[9] else None,
+                }
+                grouped[entity_key] = timeline
+                timelines.append(timeline)
+            timeline["missing_streak"] = max(
+                int(timeline.get("missing_streak") or 0),
+                int(row[10] or 0),
+            )
+            if row[11] == "DELETED":
+                timeline["status_hint"] = "DELETED_CONFIRMED"
+            elif int(row[10] or 0) >= 2:
+                timeline["status_hint"] = "DELETE_CANDIDATE"
+            else:
+                timeline["status_hint"] = "MISSING_REVIEW"
+            timeline["absence"] = {
+                "facility_id": str(row[0]).strip(),
+                "point_ordinal": row[1],
+                "first_missing_run_id": str(row[6]),
+                "first_missing_at": row[7].isoformat() if row[7] else None,
+                "last_missing_run_id": str(row[8]),
+                "last_missing_at": row[9].isoformat() if row[9] else None,
+                "missing_streak": row[10],
+                "last_change_type": row[11],
+            }
+
+        deleted_polygon_manage_nos = {
+            timeline.get("source_manage_no")
+            for timeline in timelines
+            if timeline.get("layer_type") == "Polygon"
+            and timeline.get("latest_change_type") == "DELETED"
+            and timeline.get("source_manage_no")
+        }
+        for timeline in timelines:
+            if (
+                timeline.get("layer_type") == "Point"
+                and timeline.get("latest_change_type") == "MISSING"
+                and timeline.get("source_manage_no") in deleted_polygon_manage_nos
+            ):
+                timeline["status_hint"] = "DELETED_CONFIRMED"
+
+        timelines.sort(key=lambda item: item.get("latest_detected_at") or "", reverse=True)
+        return {"timelines": timelines}
+
+    def dashboard_current_zones_geojson(self) -> dict[str, Any]:
+        with self._connect() as connection:
+            connection.execute("SET TRANSACTION READ ONLY")
+            rows = connection.execute(
+                """
+                SELECT
+                    zone_id::text,
+                    zone_group_id,
+                    source_manage_no,
+                    facility_name,
+                    facility_type_code,
+                    sgg_code,
+                    first_registered_on,
+                    last_modified_on,
+                    updated_at,
+                    ST_AsGeoJSON(ST_Transform(geom, 4326)) AS geometry
+                FROM analysis.zone_current
+                ORDER BY sgg_code, facility_name, source_manage_no
+                """
+            ).fetchall()
+            connection.rollback()
+        return {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "id": row[0],
+                    "properties": {
+                        "zone_group_id": row[1],
+                        "source_manage_no": row[2],
+                        "facility_name": row[3],
+                        "facility_type_code": row[4],
+                        "sgg_code": row[5],
+                        "api_first_registered_on": row[6].isoformat() if row[6] else None,
+                        "api_last_modified_on": row[7].isoformat() if row[7] else None,
+                        "updated_at": row[8].isoformat() if row[8] else None,
+                    },
+                    "geometry": json.loads(row[9]),
+                }
+                for row in rows
+            ],
+        }
+
+    def dashboard_current_points_geojson(self) -> dict[str, Any]:
+        with self._connect() as connection:
+            connection.execute("SET TRANSACTION READ ONLY")
+            rows = connection.execute(
+                """
+                SELECT
+                    facility_id::text,
+                    point_ordinal,
+                    zone_group_id,
+                    source_manage_no,
+                    facility_name,
+                    sgg_code,
+                    attrs ->> 'first_registered_on' AS first_registered_on,
+                    attrs ->> 'last_modified_on' AS last_modified_on,
+                    updated_at,
+                    ST_AsGeoJSON(ST_Transform(geom, 4326)) AS geometry
+                FROM analysis.zone_facility_point_current
+                ORDER BY sgg_code, facility_name, source_manage_no, point_ordinal
+                """
+            ).fetchall()
+            connection.rollback()
+        return {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "id": f"{row[0]}-{row[1]}",
+                    "properties": {
+                        "facility_id": row[0],
+                        "point_ordinal": row[1],
+                        "zone_group_id": row[2],
+                        "source_manage_no": row[3],
+                        "facility_name": row[4],
+                        "sgg_code": row[5],
+                        "api_first_registered_on": row[6],
+                        "api_last_modified_on": row[7],
+                        "updated_at": row[8].isoformat() if row[8] else None,
+                    },
+                    "geometry": json.loads(row[9]),
+                }
+                for row in rows
+            ],
+        }
+
+    def dashboard_change_zones_geojson(
+        self,
+        *,
+        limit: int = 500,
+        baseline_date: str | None = DEFAULT_DASHBOARD_BASELINE_DATE,
+    ) -> dict[str, Any]:
+        with self._connect() as connection:
+            connection.execute("SET TRANSACTION READ ONLY")
+            rows = connection.execute(
+                """
+                SELECT
+                    e.event_id,
+                    e.run_id,
+                    e.zone_id::text,
+                    e.change_type,
+                    COALESCE(e.new_snapshot ->> 'facility_name', e.old_snapshot ->> 'facility_name')
+                        AS facility_name,
+                    COALESCE(
+                        e.new_snapshot ->> 'source_manage_no',
+                        e.old_snapshot ->> 'source_manage_no'
+                    )
+                        AS source_manage_no,
+                    COALESCE(e.new_snapshot ->> 'sgg_code', e.old_snapshot ->> 'sgg_code')
+                        AS sgg_code,
+                    COALESCE(e.new_snapshot ->> 'zone_group_id', e.old_snapshot ->> 'zone_group_id')
+                        AS zone_group_id,
+                    COALESCE(
+                        e.new_snapshot ->> 'first_registered_on',
+                        e.old_snapshot ->> 'first_registered_on'
+                    )
+                        AS first_registered_on,
+                    COALESCE(
+                        e.new_snapshot ->> 'last_modified_on',
+                        e.old_snapshot ->> 'last_modified_on'
+                    )
+                        AS last_modified_on,
+                    e.detected_at,
+                    ST_AsGeoJSON(ST_Transform(g.geom, 4326)) AS geometry
+                FROM analysis.zone_change_event AS e
+                JOIN LATERAL (
+                    SELECT zs.geom
+                    FROM analysis.zone_snapshot AS zs
+                    WHERE zs.zone_id = e.zone_id
+                      AND (zs.run_id = e.run_id OR zs.created_at <= e.detected_at)
+                    ORDER BY (zs.run_id = e.run_id) DESC, zs.created_at DESC
+                    LIMIT 1
+                ) AS g ON true
+                WHERE (%s::date IS NULL)
+                   OR NOT (
+                       e.change_type = 'NEW'
+                       AND (e.detected_at AT TIME ZONE 'Asia/Seoul')::date <= %s::date
+                   )
+                ORDER BY e.detected_at DESC
+                LIMIT %s
+                """,
+                (baseline_date, baseline_date, limit),
+            ).fetchall()
+            connection.rollback()
+        return {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "id": row[0],
+                    "properties": {
+                        "layer_type": "Polygon",
+                        "run_id": str(row[1]),
+                        "zone_id": row[2],
+                        "change_type": row[3],
+                        "facility_name": row[4],
+                        "source_manage_no": row[5],
+                        "sgg_code": row[6],
+                        "zone_group_id": row[7],
+                        "api_first_registered_on": row[8],
+                        "api_last_modified_on": row[9],
+                        "detected_at": row[10].isoformat() if row[10] else None,
+                    },
+                    "geometry": json.loads(row[11]),
+                }
+                for row in rows
+            ],
+        }
+
+    def dashboard_change_points_geojson(
+        self,
+        *,
+        limit: int = 500,
+        baseline_date: str | None = DEFAULT_DASHBOARD_BASELINE_DATE,
+    ) -> dict[str, Any]:
+        with self._connect() as connection:
+            connection.execute("SET TRANSACTION READ ONLY")
+            rows = connection.execute(
+                """
+                SELECT
+                    e.event_id,
+                    e.run_id,
+                    e.facility_id::text,
+                    e.point_ordinal,
+                    e.zone_group_id,
+                    e.change_type,
+                    COALESCE(e.new_snapshot ->> 'facility_name', e.old_snapshot ->> 'facility_name')
+                        AS facility_name,
+                    COALESCE(
+                        e.new_snapshot ->> 'source_manage_no',
+                        e.old_snapshot ->> 'source_manage_no'
+                    )
+                        AS source_manage_no,
+                    COALESCE(e.new_snapshot ->> 'sgg_code', e.old_snapshot ->> 'sgg_code')
+                        AS sgg_code,
+                    COALESCE(
+                        e.new_snapshot ->> 'first_registered_on',
+                        e.old_snapshot ->> 'first_registered_on'
+                    )
+                        AS first_registered_on,
+                    COALESCE(
+                        e.new_snapshot ->> 'last_modified_on',
+                        e.old_snapshot ->> 'last_modified_on'
+                    )
+                        AS last_modified_on,
+                    e.detected_at,
+                    ST_AsGeoJSON(ST_Transform(g.geom, 4326)) AS geometry
+                FROM analysis.zone_facility_point_change_event AS e
+                JOIN LATERAL (
+                    SELECT ps.geom
+                    FROM analysis.zone_facility_point_snapshot AS ps
+                    WHERE ps.facility_id = e.facility_id
+                      AND ps.point_ordinal = e.point_ordinal
+                      AND (ps.run_id = e.run_id OR ps.created_at <= e.detected_at)
+                    ORDER BY (ps.run_id = e.run_id) DESC, ps.created_at DESC
+                    LIMIT 1
+                ) AS g ON true
+                WHERE (%s::date IS NULL)
+                   OR NOT (
+                       e.change_type = 'NEW'
+                       AND (e.detected_at AT TIME ZONE 'Asia/Seoul')::date <= %s::date
+                   )
+                ORDER BY e.detected_at DESC
+                LIMIT %s
+                """,
+                (baseline_date, baseline_date, limit),
+            ).fetchall()
+            connection.rollback()
+        return {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "id": row[0],
+                    "properties": {
+                        "layer_type": "Point",
+                        "run_id": str(row[1]),
+                        "facility_id": row[2],
+                        "point_ordinal": row[3],
+                        "zone_group_id": row[4],
+                        "change_type": row[5],
+                        "facility_name": row[6],
+                        "source_manage_no": row[7],
+                        "sgg_code": row[8],
+                        "api_first_registered_on": row[9],
+                        "api_last_modified_on": row[10],
+                        "detected_at": row[11].isoformat() if row[11] else None,
+                    },
+                    "geometry": json.loads(row[12]),
+                }
+                for row in rows
+            ],
+        }
+
+    def export_dashboard_data(
+        self,
+        output_dir: str | Path,
+        *,
+        event_limit: int = 500,
+        baseline_date: str | None = DEFAULT_DASHBOARD_BASELINE_DATE,
+    ) -> None:
+        target = Path(output_dir)
+        target.mkdir(parents=True, exist_ok=True)
+        datasets = {
+            "overview.json": self.dashboard_overview(),
+            "change_events.json": self.dashboard_change_events(
+                limit=event_limit,
+                baseline_date=baseline_date,
+            ),
+            "current_zones.geojson": self.dashboard_current_zones_geojson(),
+            "current_points.geojson": self.dashboard_current_points_geojson(),
+            "change_zones.geojson": self.dashboard_change_zones_geojson(
+                limit=event_limit,
+                baseline_date=baseline_date,
+            ),
+            "change_points.geojson": self.dashboard_change_points_geojson(
+                limit=event_limit,
+                baseline_date=baseline_date,
+            ),
+            "timelines.json": self.dashboard_timelines(
+                limit=event_limit * 2,
+                baseline_date=baseline_date,
+            ),
+        }
+        for filename, payload in datasets.items():
+            (target / filename).write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
             )
 
     def build_link_match_candidates(
@@ -1333,7 +2154,7 @@ class Repository:
                         WHEN 'B' THEN
                             CASE
                                 WHEN potential_grade_separated
-                                    THEN 'high-rank overlapping link kept for review due to possible grade separation'
+                                    THEN 'high-rank overlap kept for grade-separation review'
                                 ELSE 'direct overlap meeting weak length and ratio thresholds'
                             END
                         WHEN 'C'
