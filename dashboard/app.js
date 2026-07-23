@@ -26,7 +26,7 @@ const state = {
   polygonDeletedManageNos: new Set(),
   currentGroups: new Map(),
 };
-document.body.dataset.dashboardVersion = "20260723-11";
+document.body.dataset.dashboardVersion = "20260723-12";
 
 function numberText(value) {
   return Number(value || 0).toLocaleString("ko-KR");
@@ -104,6 +104,22 @@ function currentLayerKey(code) {
   if (normalized === "2") return "currentSenior";
   if (normalized === "3") return "currentDisabled";
   return "currentOther";
+}
+
+function matchesEventFilter(event, filterValue) {
+  if (!filterValue) return true;
+  const [filterKind, filterTarget] = filterValue.split(":");
+  if (filterKind === "TYPE") {
+    return event.change_type === filterTarget;
+  }
+  if (filterKind === "ZONE") {
+    const normalized = String(event.facility_type_code || "").trim();
+    if (filterTarget === "OTHER") {
+      return !["1", "2", "3"].includes(normalized);
+    }
+    return normalized === filterTarget;
+  }
+  return true;
 }
 
 function summarizeNames(names) {
@@ -379,9 +395,8 @@ function renderOverview(overview) {
 
 function renderEvents() {
   const query = document.getElementById("event-search").value.trim().toLowerCase();
-  const type = document.getElementById("event-type").value;
+  const filterValue = document.getElementById("event-type").value;
   const filtered = state.events.filter((event) => {
-    const matchesType = !type || event.change_type === type;
     const haystack = [
       event.facility_name,
       event.source_manage_no,
@@ -393,7 +408,7 @@ function renderEvents() {
     ]
       .join(" ")
       .toLowerCase();
-    return matchesType && (!query || haystack.includes(query));
+    return matchesEventFilter(event, filterValue) && (!query || haystack.includes(query));
   });
 
   document.getElementById("event-total").textContent = `${numberText(filtered.length)}건`;
