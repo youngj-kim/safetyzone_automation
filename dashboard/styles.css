@@ -481,6 +481,22 @@ input[type="checkbox"] {
   font-weight: 700;
 }
 
+.zone-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.zone-type::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--zone-type-color, var(--gray));
+}
+
 .popup-timeline {
   margin: 8px 0;
   padding: 8px 0 0;
@@ -542,12 +558,16 @@ input[type="checkbox"] {
   border-radius: 50%;
 }
 
-.current-zone {
-  border: 2px solid var(--blue);
+.zone-child {
+  background: #2d6cdf;
 }
 
-.current-point {
-  background: var(--blue);
+.zone-senior {
+  background: #8b5a00;
+}
+
+.zone-disabled {
+  background: #00856f;
 }
 
 .change-new {

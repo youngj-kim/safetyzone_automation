@@ -15,6 +15,7 @@
         "zone_group_id": "113501010347",
         "api_first_registered_on": "1995-01-01",
         "api_last_modified_on": null,
+        "facility_type_code": "1",
         "detected_at": "2026-07-23T00:02:17.735964+00:00"
       },
       "geometry": {
@@ -185,6 +186,7 @@
         "zone_group_id": null,
         "api_first_registered_on": null,
         "api_last_modified_on": null,
+        "facility_type_code": "1",
         "detected_at": "2026-07-23T00:02:17.735964+00:00"
       },
       "geometry": {

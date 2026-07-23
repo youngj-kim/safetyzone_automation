@@ -23,7 +23,7 @@ const state = {
   polygonDeletedManageNos: new Set(),
   currentGroups: new Map(),
 };
-document.body.dataset.dashboardVersion = "20260723-6";
+document.body.dataset.dashboardVersion = "20260723-8";
 
 function numberText(value) {
   return Number(value || 0).toLocaleString("ko-KR");
@@ -53,6 +53,20 @@ function changeCategory(type) {
   if (type === "NEW") return "new";
   if (type === "DELETED" || type === "MISSING") return "review";
   return "changed";
+}
+
+function zoneTypeInfo(code) {
+  const normalized = String(code || "").trim();
+  const types = {
+    1: { label: "어린이보호구역", color: "#2d6cdf", fillOpacity: 0.1 },
+    2: { label: "노인보호구역", color: "#8b5a00", fillOpacity: 0.12 },
+    3: { label: "장애인보호구역", color: "#00856f", fillOpacity: 0.12 },
+  };
+  return types[normalized] || {
+    label: "보호구역 유형 미분류",
+    color: "#707985",
+    fillOpacity: 0.08,
+  };
 }
 
 function summarizeNames(names) {
@@ -242,6 +256,7 @@ function popupContent(props) {
   const title = props.facility_name || "이름 없음";
   const type = props.change_type ? `<b>${props.change_type}</b><br>` : "";
   const review = enriched.review_reason ? `검토: ${enriched.review_reason}<br>` : "";
+  const zoneType = zoneTypeInfo(props.facility_type_code);
   const apiDates =
     props.api_first_registered_on || props.api_last_modified_on
       ? `API 최초등록: ${formatApiDate(props.api_first_registered_on)}<br>
@@ -250,6 +265,7 @@ function popupContent(props) {
   return `
     <strong>${title}</strong><br>
     ${type}
+    종류: ${zoneType.label}<br>
     관리번호: ${props.source_manage_no || "-"}<br>
     시군구: ${props.sgg_code || "-"}<br>
     그룹: ${props.zone_group_id || "-"}<br>
@@ -328,6 +344,8 @@ function renderEvents() {
       event.sgg_code,
       event.run_id,
       event.layer_type,
+      event.facility_type_code,
+      zoneTypeInfo(event.facility_type_code).label,
     ]
       .join(" ")
       .toLowerCase();
@@ -340,6 +358,7 @@ function renderEvents() {
     ...filtered.slice(0, 120).map((event) => {
       const enriched = enrichReviewProperties(event);
       const timelineText = timelineSummary(timelineForProps(event));
+      const zoneType = zoneTypeInfo(event.facility_type_code);
       const item = document.createElement("li");
       item.className = "event-item";
       item.tabIndex = 0;
@@ -351,6 +370,7 @@ function renderEvents() {
           <span class="badge ${event.change_type}">${event.change_type}</span>
         </div>
         <div class="event-meta">
+          <span class="zone-type" style="--zone-type-color: ${zoneType.color}">${zoneType.label}</span><br>
           ${event.layer_type} · ${event.source_manage_no || "-"} · ${event.sgg_code || "-"}<br>
           ${
             enriched.review_reason
@@ -386,12 +406,15 @@ function renderEvents() {
 
 function addCurrentZones(geojson) {
   const layer = L.geoJSON(geojson, {
-    style: {
-      color: "#2d6cdf",
+    style: (feature) => {
+      const zoneType = zoneTypeInfo(feature.properties?.facility_type_code);
+      return {
+      color: zoneType.color,
       weight: 1.6,
       opacity: 0.8,
-      fillColor: "#2d6cdf",
-      fillOpacity: 0.08,
+      fillColor: zoneType.color,
+      fillOpacity: zoneType.fillOpacity,
+      };
     },
     onEachFeature: (feature, itemLayer) => {
       const props = enrichReviewProperties({
@@ -408,14 +431,16 @@ function addCurrentZones(geojson) {
 
 function addCurrentPoints(geojson) {
   return L.geoJSON(geojson, {
-    pointToLayer: (feature, latlng) =>
-      L.circleMarker(latlng, {
+    pointToLayer: (feature, latlng) => {
+      const zoneType = zoneTypeInfo(feature.properties?.facility_type_code);
+      return L.circleMarker(latlng, {
         radius: 4,
         color: "#ffffff",
         weight: 1,
-        fillColor: "#2d6cdf",
+        fillColor: zoneType.color,
         fillOpacity: 0.9,
-      }),
+      });
+    },
     onEachFeature: (feature, itemLayer) => {
       const props = enrichReviewProperties({
         layer_type: "Point",

@@ -945,6 +945,11 @@ class Repository:
                         old_snapshot ->> 'last_modified_on'
                     )
                         AS last_modified_on,
+                    COALESCE(
+                        new_snapshot ->> 'facility_type_code',
+                        old_snapshot ->> 'facility_type_code'
+                    )
+                        AS facility_type_code,
                     detected_at
                 FROM analysis.zone_change_event
                 WHERE (%s::date IS NULL)
@@ -984,6 +989,11 @@ class Repository:
                         old_snapshot ->> 'last_modified_on'
                     )
                         AS last_modified_on,
+                    COALESCE(
+                        new_snapshot ->> 'facility_type_code',
+                        old_snapshot ->> 'facility_type_code'
+                    )
+                        AS facility_type_code,
                     detected_at
                 FROM analysis.zone_facility_point_change_event
                 WHERE (%s::date IS NULL)
@@ -1000,7 +1010,7 @@ class Repository:
 
         rows = sorted(
             [*polygon_rows, *point_rows],
-            key=lambda row: row[10],
+            key=lambda row: row[11],
             reverse=True,
         )[:limit]
         return {
@@ -1016,7 +1026,8 @@ class Repository:
                     "zone_group_id": row[7],
                     "api_first_registered_on": row[8],
                     "api_last_modified_on": row[9],
-                    "detected_at": row[10].isoformat() if row[10] else None,
+                    "facility_type_code": row[10],
+                    "detected_at": row[11].isoformat() if row[11] else None,
                 }
                 for row in rows
             ]
@@ -1058,6 +1069,11 @@ class Repository:
                         old_snapshot ->> 'last_modified_on'
                     )
                         AS last_modified_on,
+                    COALESCE(
+                        new_snapshot ->> 'facility_type_code',
+                        old_snapshot ->> 'facility_type_code'
+                    )
+                        AS facility_type_code,
                     detected_at
                 FROM analysis.zone_change_event
                 WHERE (%s::date IS NULL)
@@ -1097,6 +1113,11 @@ class Repository:
                         old_snapshot ->> 'last_modified_on'
                     )
                         AS last_modified_on,
+                    COALESCE(
+                        new_snapshot ->> 'facility_type_code',
+                        old_snapshot ->> 'facility_type_code'
+                    )
+                        AS facility_type_code,
                     detected_at
                 FROM analysis.zone_facility_point_change_event
                 WHERE (%s::date IS NULL)
@@ -1138,7 +1159,7 @@ class Repository:
             connection.rollback()
 
         grouped: dict[str, dict[str, Any]] = {}
-        rows = sorted([*polygon_rows, *point_rows], key=lambda row: row[10], reverse=True)
+        rows = sorted([*polygon_rows, *point_rows], key=lambda row: row[11], reverse=True)
         for row in rows:
             layer_type = row[0]
             source_manage_no = row[5]
@@ -1156,7 +1177,8 @@ class Repository:
                 "sgg_code": row[7],
                 "api_first_registered_on": row[8],
                 "api_last_modified_on": row[9],
-                "detected_at": row[10].isoformat() if row[10] else None,
+                "facility_type_code": row[10],
+                "detected_at": row[11].isoformat() if row[11] else None,
             }
             if entity_key not in grouped:
                 grouped[entity_key] = {
@@ -1166,6 +1188,7 @@ class Repository:
                     "zone_group_id": zone_group_id,
                     "facility_name": row[4],
                     "sgg_code": row[7],
+                    "facility_type_code": row[10],
                     "events": [],
                 }
             grouped[entity_key]["events"].append(event)
@@ -1315,6 +1338,7 @@ class Repository:
                     source_manage_no,
                     facility_name,
                     sgg_code,
+                    attrs ->> 'facility_type_code' AS facility_type_code,
                     attrs ->> 'first_registered_on' AS first_registered_on,
                     attrs ->> 'last_modified_on' AS last_modified_on,
                     updated_at,
@@ -1337,11 +1361,12 @@ class Repository:
                         "source_manage_no": row[3],
                         "facility_name": row[4],
                         "sgg_code": row[5],
-                        "api_first_registered_on": row[6],
-                        "api_last_modified_on": row[7],
-                        "updated_at": row[8].isoformat() if row[8] else None,
+                        "facility_type_code": row[6],
+                        "api_first_registered_on": row[7],
+                        "api_last_modified_on": row[8],
+                        "updated_at": row[9].isoformat() if row[9] else None,
                     },
-                    "geometry": json.loads(row[9]),
+                    "geometry": json.loads(row[10]),
                 }
                 for row in rows
             ],
@@ -1383,6 +1408,11 @@ class Repository:
                         e.old_snapshot ->> 'last_modified_on'
                     )
                         AS last_modified_on,
+                    COALESCE(
+                        e.new_snapshot ->> 'facility_type_code',
+                        e.old_snapshot ->> 'facility_type_code'
+                    )
+                        AS facility_type_code,
                     e.detected_at,
                     ST_AsGeoJSON(ST_Transform(g.geom, 4326)) AS geometry
                 FROM analysis.zone_change_event AS e
@@ -1422,9 +1452,10 @@ class Repository:
                         "zone_group_id": row[7],
                         "api_first_registered_on": row[8],
                         "api_last_modified_on": row[9],
-                        "detected_at": row[10].isoformat() if row[10] else None,
+                        "facility_type_code": row[10],
+                        "detected_at": row[11].isoformat() if row[11] else None,
                     },
-                    "geometry": json.loads(row[11]),
+                    "geometry": json.loads(row[12]),
                 }
                 for row in rows
             ],
@@ -1466,6 +1497,11 @@ class Repository:
                         e.old_snapshot ->> 'last_modified_on'
                     )
                         AS last_modified_on,
+                    COALESCE(
+                        e.new_snapshot ->> 'facility_type_code',
+                        e.old_snapshot ->> 'facility_type_code'
+                    )
+                        AS facility_type_code,
                     e.detected_at,
                     ST_AsGeoJSON(ST_Transform(g.geom, 4326)) AS geometry
                 FROM analysis.zone_facility_point_change_event AS e
@@ -1507,9 +1543,10 @@ class Repository:
                         "sgg_code": row[8],
                         "api_first_registered_on": row[9],
                         "api_last_modified_on": row[10],
-                        "detected_at": row[11].isoformat() if row[11] else None,
+                        "facility_type_code": row[11],
+                        "detected_at": row[12].isoformat() if row[12] else None,
                     },
-                    "geometry": json.loads(row[12]),
+                    "geometry": json.loads(row[13]),
                 }
                 for row in rows
             ],
