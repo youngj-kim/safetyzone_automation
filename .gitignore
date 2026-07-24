@@ -20,6 +20,7 @@ safety_zone_data/
 tmp/
 tmp_standard_node_link_spec.*
 *.qgz
+dashboard/config.js
 
 # The supplied reference files contain an API key and must not be committed.
 경찰청_보호구역현황_OPEN_API_추출절차.docx

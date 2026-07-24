@@ -24,6 +24,8 @@ docs/automation_room_handoff.md 확인해서 지금까지 개발진행한거 커
 - 노인보호구역과 변경, 장애인보호구역과 신규가 혼동되지 않도록 보호구역 종류 팔레트를 재지정했습니다.
 - 모니터링 이력의 실패 run은 숨기지 않고, 카드에 실패 사유를 표시합니다.
 - 대시보드 export에 포함되는 실패 메시지는 `serviceKey`, `token` 등 민감 쿼리 파라미터를 마스킹합니다.
+- Kakao JavaScript SDK 키가 있을 때 OSM/Kakao 지도 전환과 선택 위치 Roadview 확인을 사용할 수 있도록 추가했습니다.
+- GitHub Pages 배포 시 repository secret `KAKAO_JS_KEY`를 읽어 `dashboard/config.js`를 생성합니다.
 - 대시보드 데이터 export에 `facility_type_code`가 포함되도록 DB export 쿼리를 수정했습니다.
 - 대시보드 정적 데이터는 2026-07-07 기준선 정책을 적용해 재생성했습니다.
 - 전국 수집은 API 429를 피하기 위해 `config/sgg_chunks/nationwide_chunk_*.txt` 청크 파일로 나눠 실행할 수 있습니다.
@@ -42,6 +44,9 @@ docs/automation_room_handoff.md 확인해서 지금까지 개발진행한거 커
 - `dashboard/index.html`
 - `dashboard/app.js`
 - `dashboard/styles.css`
+- `dashboard/config.example.js`
+- `.github/workflows/pages.yml`
+- `.gitignore`
 - `src/safety_zone_monitor/db.py`
 - `dashboard/data/change_events.json`
 - `dashboard/data/change_points.geojson`
@@ -74,6 +79,7 @@ docs/automation_room_handoff.md 확인해서 지금까지 개발진행한거 커
 - `.pytest_cache/`
 - `.ruff_cache/`
 - `tmp/`
+- `dashboard/config.js`
 - `config/law_dong_codes_full.zip`
 - `config/law_dong_codes_full/`
 
@@ -97,6 +103,7 @@ node --check dashboard\app.js
 - `pytest` 27개 통과
 - 대시보드 데이터 export 완료
 - 로컬 `http://localhost:8084/dashboard/` 응답 확인
+- Kakao 지도/Roadview는 `KAKAO_JS_KEY`가 배포 환경에 있어야 활성화됩니다.
 
 ## 배포 확인
 
@@ -108,8 +115,14 @@ node --check dashboard\app.js
 
 현재 기대 버전:
 
-- `styles.css?v=20260723-13`
-- `app.js?v=20260723-13`
+- `styles.css?v=20260724-1`
+- `config.js?v=20260724-1`
+- `app.js?v=20260724-1`
+
+Kakao 설정 확인:
+
+- GitHub repository secret `KAKAO_JS_KEY`가 등록되어 있어야 합니다.
+- Kakao Developers JavaScript SDK 도메인에 `https://safetyzone.yjkim.dev`와 `http://localhost:8084`가 등록되어 있어야 합니다.
 
 ## 전국 기준선 상태
 
@@ -125,7 +138,7 @@ node --check dashboard\app.js
 
 - API 제한이 풀린 뒤 전국 기준선 수집을 재시도합니다.
 - 전국 기준선 등록 후 dashboard data를 다시 export하고 배포합니다.
-- 필요 시 Kakao 지도/Roadview 적용은 별도 법적/약관 검토 후 진행합니다.
+- Kakao 지도/Roadview 배포 후 실제 도메인에서 SDK 로드와 로드뷰 조회를 확인합니다.
 
 ## 1번방 작업 순서
 

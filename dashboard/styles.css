@@ -548,6 +548,104 @@ input[type="checkbox"] {
   min-height: 0;
 }
 
+#kakao-map {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+#map[hidden],
+#kakao-map[hidden] {
+  display: none;
+}
+
+.map-mode-control {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 620;
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 8px 30px rgba(31, 41, 51, 0.14);
+}
+
+.map-mode-button,
+.popup-roadview-button,
+#roadview-close {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text);
+  background: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.map-mode-button {
+  min-height: 30px;
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.map-mode-button.active {
+  color: #fff;
+  background: var(--text);
+}
+
+.popup-roadview-button {
+  margin-top: 8px;
+  padding: 6px 9px;
+  border-color: var(--line);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.roadview-panel {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 640;
+  width: min(420px, calc(100% - 32px));
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 36px rgba(31, 41, 51, 0.2);
+}
+
+.roadview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+#roadview-close {
+  width: 28px;
+  height: 28px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.roadview-status {
+  margin: 0;
+  padding: 8px 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+#roadview {
+  width: 100%;
+  height: 280px;
+  background: #eef2f1;
+}
+
 .legend {
   position: absolute;
   right: 16px;
@@ -686,6 +784,23 @@ input[type="checkbox"] {
     padding: 10px;
   }
 
+  .map-mode-control {
+    top: calc(12px + env(safe-area-inset-top));
+    left: 12px;
+    right: auto;
+  }
+
+  .roadview-panel {
+    left: 12px;
+    right: 12px;
+    bottom: calc(54vh + 10px);
+    width: auto;
+  }
+
+  #roadview {
+    height: 220px;
+  }
+
   .leaflet-control-zoom {
     margin-top: calc(10px + env(safe-area-inset-top));
   }
@@ -741,6 +856,11 @@ input[type="checkbox"] {
     max-width: calc(100vw - 78px);
     grid-template-columns: repeat(2, max-content);
     gap: 6px 10px;
+    font-size: 11px;
+  }
+
+  .map-mode-button {
+    padding: 5px 7px;
     font-size: 11px;
   }
 }

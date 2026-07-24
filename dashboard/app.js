@@ -25,11 +25,28 @@ const state = {
   currentItems: [],
   currentLayers: new Map(),
   currentFeatures: new Map(),
+  selectedLocation: null,
+  kakao: {
+    enabled: false,
+    loading: null,
+    map: null,
+    marker: null,
+    roadview: null,
+    roadviewClient: null,
+  },
   timelines: new Map(),
   polygonDeletedManageNos: new Set(),
   currentGroups: new Map(),
 };
-document.body.dataset.dashboardVersion = "20260723-13";
+document.body.dataset.dashboardVersion = "20260724-1";
+
+const dashboardConfig = window.SAFETYZONE_CONFIG || {};
+const queryParams = new URLSearchParams(window.location.search);
+const kakaoJavascriptKey =
+  dashboardConfig.kakaoJavascriptKey ||
+  queryParams.get("kakaoKey") ||
+  document.body.dataset.kakaoKey ||
+  "";
 
 function numberText(value) {
   return Number(value || 0).toLocaleString("ko-KR");
@@ -282,6 +299,134 @@ function boundsFromFeature(feature) {
   return points.length ? L.latLngBounds(points) : null;
 }
 
+function centerFromFeature(feature) {
+  const bounds = boundsFromFeature(feature);
+  return bounds?.isValid() ? bounds.getCenter() : null;
+}
+
+function setSelectedLocation(latlng, props = {}) {
+  if (!latlng) return;
+  state.selectedLocation = {
+    lat: latlng.lat,
+    lng: latlng.lng,
+    title: props.facility_name || "선택 위치",
+    props,
+  };
+  syncKakaoLocation();
+}
+
+function showRoadviewStatus(message) {
+  const status = document.getElementById("roadview-status");
+  if (status) status.textContent = message;
+}
+
+function loadKakaoSdk() {
+  if (!kakaoJavascriptKey) {
+    return Promise.reject(new Error("Kakao JavaScript key is not configured."));
+  }
+  if (window.kakao?.maps) {
+    return new Promise((resolve) => window.kakao.maps.load(resolve));
+  }
+  if (state.kakao.loading) return state.kakao.loading;
+
+  state.kakao.loading = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(
+      kakaoJavascriptKey,
+    )}&autoload=false`;
+    script.async = true;
+    script.onload = () => window.kakao.maps.load(resolve);
+    script.onerror = () => reject(new Error("Failed to load Kakao Maps SDK."));
+    document.head.appendChild(script);
+  });
+  return state.kakao.loading;
+}
+
+async function ensureKakaoMap() {
+  if (state.kakao.enabled) return true;
+  await loadKakaoSdk();
+  const location = state.selectedLocation || { lat: 36.4, lng: 127.8, title: "대한민국" };
+  const center = new kakao.maps.LatLng(location.lat, location.lng);
+  state.kakao.map = new kakao.maps.Map(document.getElementById("kakao-map"), {
+    center,
+    level: 5,
+  });
+  state.kakao.marker = new kakao.maps.Marker({
+    map: state.kakao.map,
+    position: center,
+  });
+  state.kakao.roadview = new kakao.maps.Roadview(document.getElementById("roadview"));
+  state.kakao.roadviewClient = new kakao.maps.RoadviewClient();
+  state.kakao.map.addOverlayMapTypeId(kakao.maps.MapTypeId.ROADVIEW);
+  state.kakao.enabled = true;
+  syncKakaoLocation();
+  return true;
+}
+
+function syncKakaoLocation() {
+  if (!state.kakao.enabled || !state.selectedLocation) return;
+  const position = new kakao.maps.LatLng(state.selectedLocation.lat, state.selectedLocation.lng);
+  state.kakao.map.setCenter(position);
+  state.kakao.marker.setPosition(position);
+  document.getElementById("roadview-title").textContent = state.selectedLocation.title;
+}
+
+async function setMapMode(mode) {
+  const isKakao = mode === "kakao";
+  if (isKakao) {
+    try {
+      await ensureKakaoMap();
+    } catch (error) {
+      showRoadviewStatus("Kakao JavaScript 키와 도메인 등록이 필요합니다.");
+      console.warn(error);
+      return;
+    }
+  }
+
+  document.body.dataset.mapMode = mode;
+  document.getElementById("map").hidden = isKakao;
+  document.getElementById("kakao-map").hidden = !isKakao;
+  document.querySelectorAll(".map-mode-button[data-map-mode]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.mapMode === mode);
+  });
+
+  if (isKakao) {
+    requestAnimationFrame(() => {
+      state.kakao.map.relayout();
+      syncKakaoLocation();
+    });
+  } else {
+    requestAnimationFrame(() => map.invalidateSize());
+  }
+}
+
+async function openRoadview() {
+  const location = state.selectedLocation;
+  document.querySelector(".roadview-panel").hidden = false;
+  if (!location) {
+    showRoadviewStatus("먼저 보호구역 또는 변경 항목을 선택하세요.");
+    return;
+  }
+
+  try {
+    await setMapMode("kakao");
+    document.getElementById("roadview-title").textContent = location.title;
+    showRoadviewStatus("가장 가까운 로드뷰를 찾는 중입니다.");
+    const position = new kakao.maps.LatLng(location.lat, location.lng);
+    state.kakao.roadviewClient.getNearestPanoId(position, 100, (panoId) => {
+      if (!panoId) {
+        showRoadviewStatus("주변 100m 안에서 로드뷰를 찾지 못했습니다.");
+        return;
+      }
+      state.kakao.roadview.setPanoId(panoId, position);
+      showRoadviewStatus("선택 위치 주변 로드뷰입니다.");
+    });
+  } catch (error) {
+    showRoadviewStatus("Kakao JavaScript 키와 도메인 등록이 필요합니다.");
+    console.warn(error);
+  }
+}
+
 function ensureLayerVisible(category) {
   const group = layerGroups[category];
   if (!group) return;
@@ -314,6 +459,7 @@ function focusEvent(event) {
   document.body.dataset.lastFocus = JSON.stringify(window.dashboardLastFocus);
   if (!bounds?.isValid()) return;
   const center = bounds.getCenter();
+  setSelectedLocation(center, event);
   if (feature?.geometry?.type === "Point" || bounds.getNorthEast().equals(bounds.getSouthWest())) {
     map.setView(center, Math.max(map.getZoom(), 17), { animate: true });
   } else {
@@ -348,6 +494,7 @@ function focusCurrentItem(item) {
   document.body.dataset.lastFocus = JSON.stringify(window.dashboardLastFocus);
   if (!bounds?.isValid()) return;
   const center = bounds.getCenter();
+  setSelectedLocation(center, item);
   if (item.layer_type === "Point" || bounds.getNorthEast().equals(bounds.getSouthWest())) {
     map.setView(center, Math.max(map.getZoom(), 17), { animate: true });
   } else {
@@ -383,6 +530,7 @@ function popupContent(props) {
     ${popupTimelineContent(props)}
     ${props.detected_at ? `감지: ${formatDate(props.detected_at)}<br>` : ""}
     ${props.updated_at ? `시스템 갱신: ${formatDate(props.updated_at)}<br>` : ""}
+    <button class="popup-roadview-button" type="button">카카오 로드뷰</button>
   `;
 }
 
@@ -606,6 +754,7 @@ function addCurrentZones(geojson) {
           feature.properties = props;
           state.currentLayers.set(currentItemKey(props), itemLayer);
           state.currentFeatures.set(currentItemKey(props), feature);
+          itemLayer.on("click", () => setSelectedLocation(centerFromFeature(feature), props));
           itemLayer.bindPopup(popupContent(props));
         },
       }).addTo(layerGroups[key]),
@@ -636,6 +785,7 @@ function addCurrentPoints(geojson) {
           feature.properties = props;
           state.currentLayers.set(currentItemKey(props), itemLayer);
           state.currentFeatures.set(currentItemKey(props), feature);
+          itemLayer.on("click", () => setSelectedLocation(centerFromFeature(feature), props));
           itemLayer.bindPopup(popupContent(props));
         },
       }).addTo(layerGroups[key]),
@@ -666,6 +816,7 @@ function addChangeLayer(geojson) {
       onEachFeature: (item, itemLayer) => {
         const props = enrichReviewProperties(item.properties || {});
         item.properties = props;
+        itemLayer.on("click", () => setSelectedLocation(centerFromFeature(item), props));
         itemLayer.bindPopup(popupContent(props));
         state.eventLayers.set(eventKey(props), itemLayer);
       },
@@ -706,9 +857,24 @@ function bindActivityTabs() {
   });
 }
 
+function bindMapTools() {
+  document.querySelectorAll(".map-mode-button[data-map-mode]").forEach((button) => {
+    button.addEventListener("click", () => setMapMode(button.dataset.mapMode));
+  });
+  document.querySelector(".roadview-action").addEventListener("click", openRoadview);
+  document.getElementById("roadview-close").addEventListener("click", () => {
+    document.querySelector(".roadview-panel").hidden = true;
+  });
+  map.on("popupopen", (event) => {
+    const button = event.popup.getElement()?.querySelector(".popup-roadview-button");
+    if (button) button.addEventListener("click", openRoadview);
+  });
+}
+
 async function main() {
   bindLayerToggles();
   bindActivityTabs();
+  bindMapTools();
   document.getElementById("event-search").addEventListener("input", renderEvents);
   document.getElementById("event-type").addEventListener("change", renderEvents);
   document.getElementById("current-search").addEventListener("input", renderCurrentItems);
