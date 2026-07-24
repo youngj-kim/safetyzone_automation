@@ -31,3 +31,24 @@ def test_incomplete_pagination_fails_instead_of_creating_missing_records() -> No
     )
     with pytest.raises(ApiError, match="Incomplete response"):
         client.fetch_district("11110")
+
+
+class EmptyResultClient(SafetyZoneApiClient):
+    def __init__(self) -> None:
+        super().__init__(
+            base_url="https://example.invalid",
+            service_key="test",
+            delay_seconds=0,
+            allow_empty_result=True,
+        )
+
+    def _fetch_page(self, sgg_code: str, page_no: int) -> dict:
+        self.empty_result_sgg_codes.add(sgg_code)
+        return {"totalCount": 0, "numOfRows": 1000, "items": {"item": []}}
+
+
+def test_empty_result_district_is_recorded_and_returns_no_records() -> None:
+    client = EmptyResultClient()
+
+    assert client.fetch_district("28125") == []
+    assert client.empty_result_sgg_codes == {"28125"}

@@ -62,6 +62,7 @@ class SafetyZoneApiClient:
         self.timeout_seconds = timeout_seconds
         self.delay_seconds = delay_seconds
         self.allow_empty_result = allow_empty_result
+        self.empty_result_sgg_codes: set[str] = set()
         self.session = session or requests.Session()
         if session is None:
             retry = Retry(
@@ -100,6 +101,7 @@ class SafetyZoneApiClient:
             return response_body(payload)
         except ApiError as exc:
             if self.allow_empty_result and "ERR_03" in str(exc):
+                self.empty_result_sgg_codes.add(sgg_code)
                 logger.info("Fetched district=%s page=%s/0 items=0", sgg_code, page_no)
                 return {
                     "totalCount": 0,

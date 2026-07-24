@@ -13,14 +13,22 @@ logger = logging.getLogger(__name__)
 
 
 def _validate_response_coverage(
-    raw_items: list[dict[str, object]], sgg_codes: tuple[str, ...]
+    raw_items: list[dict[str, object]],
+    sgg_codes: tuple[str, ...],
+    *,
+    empty_result_sgg_codes: set[str] | None = None,
 ) -> None:
     if not raw_items:
         raise RuntimeError("Open API returned zero records for all configured districts")
+    empty_result_sgg_codes = empty_result_sgg_codes or set()
     response_counts = Counter(
         str(item.get("sggCd", "")).strip() for item in raw_items
     )
-    empty_districts = [code for code in sgg_codes if response_counts.get(code, 0) == 0]
+    empty_districts = [
+        code
+        for code in sgg_codes
+        if response_counts.get(code, 0) == 0 and code not in empty_result_sgg_codes
+    ]
     if empty_districts:
         raise RuntimeError(
             "Open API returned zero records for configured district(s); "
@@ -59,18 +67,32 @@ def run_pipeline(settings: Settings, *, record_events: bool = True) -> RunSummar
             num_rows=settings.num_rows,
             timeout_seconds=settings.timeout_seconds,
             delay_seconds=settings.request_delay_seconds,
-            allow_empty_result=not record_events,
+            allow_empty_result=True,
         )
         raw_items = client.fetch_all(settings.sgg_codes)
+        effective_sgg_codes = tuple(
+            code for code in settings.sgg_codes if code not in client.empty_result_sgg_codes
+        )
+        if not effective_sgg_codes:
+            raise RuntimeError("Open API returned zero records for all configured districts")
+        if client.empty_result_sgg_codes:
+            logger.warning(
+                "Skipping empty Open API district(s) for current-state comparison: %s",
+                ", ".join(sorted(client.empty_result_sgg_codes)),
+            )
         normalized = normalize_records(raw_items)
 
         # Never interpret an empty district response as a legitimate mass deletion.
         if record_events:
-            _validate_response_coverage(raw_items, settings.sgg_codes)
+            _validate_response_coverage(
+                raw_items,
+                effective_sgg_codes,
+                empty_result_sgg_codes=client.empty_result_sgg_codes,
+            )
 
         summary = repository.apply_run(
             run_id=run_id,
-            sgg_codes=settings.sgg_codes,
+            sgg_codes=effective_sgg_codes,
             raw_items=raw_items,
             records=normalized.zones,
             facility_points=normalized.facility_points,
