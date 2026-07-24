@@ -604,6 +604,37 @@ input[type="checkbox"] {
   font-weight: 700;
 }
 
+.kakao-point-marker {
+  display: block;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: var(--marker-color, var(--blue));
+  box-shadow: 0 1px 5px rgba(31, 41, 51, 0.3);
+  cursor: pointer;
+}
+
+.kakao-point-marker.has-change {
+  width: 16px;
+  height: 16px;
+}
+
+.kakao-point-marker:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.kakao-info {
+  min-width: 220px;
+  max-width: 300px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .roadview-panel {
   position: absolute;
   right: 16px;
@@ -617,6 +648,10 @@ input[type="checkbox"] {
   box-shadow: 0 12px 36px rgba(31, 41, 51, 0.2);
 }
 
+.roadview-panel.resizing {
+  user-select: none;
+}
+
 .roadview-header {
   display: flex;
   align-items: center;
@@ -624,6 +659,12 @@ input[type="checkbox"] {
   gap: 12px;
   padding: 10px 12px;
   border-bottom: 1px solid var(--line);
+  cursor: grab;
+  user-select: none;
+}
+
+.roadview-panel.dragging .roadview-header {
+  cursor: grabbing;
 }
 
 #roadview-close {
@@ -646,10 +687,29 @@ input[type="checkbox"] {
   background: #eef2f1;
 }
 
+.roadview-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background:
+    linear-gradient(135deg, transparent 45%, rgba(31, 41, 51, 0.35) 46%, rgba(31, 41, 51, 0.35) 52%, transparent 53%),
+    linear-gradient(135deg, transparent 62%, rgba(31, 41, 51, 0.35) 63%, rgba(31, 41, 51, 0.35) 69%, transparent 70%);
+  cursor: nwse-resize;
+}
+
+.roadview-resize:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: -4px;
+}
+
 .legend {
   position: absolute;
   right: 16px;
-  bottom: 16px;
+  top: 64px;
   z-index: 500;
   display: grid;
   grid-template-columns: repeat(2, max-content);
@@ -660,6 +720,7 @@ input[type="checkbox"] {
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 8px 30px rgba(31, 41, 51, 0.14);
   font-size: 12px;
+  max-width: calc(100% - 32px);
 }
 
 .legend span {
@@ -777,11 +838,12 @@ input[type="checkbox"] {
   }
 
   .legend {
-    top: calc(12px + env(safe-area-inset-top));
-    right: 12px;
-    bottom: auto;
+    top: calc(58px + env(safe-area-inset-top));
+    right: auto;
+    left: 12px;
     grid-template-columns: repeat(2, max-content);
     padding: 10px;
+    max-width: calc(100% - 24px);
   }
 
   .map-mode-control {

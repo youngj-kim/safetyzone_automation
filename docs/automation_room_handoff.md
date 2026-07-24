@@ -25,6 +25,14 @@ docs/automation_room_handoff.md 확인해서 지금까지 개발진행한거 커
 - 모니터링 이력의 실패 run은 숨기지 않고, 카드에 실패 사유를 표시합니다.
 - 대시보드 export에 포함되는 실패 메시지는 `serviceKey`, `token` 등 민감 쿼리 파라미터를 마스킹합니다.
 - Kakao JavaScript SDK 키가 있을 때 OSM/Kakao 지도 전환과 선택 위치 Roadview 확인을 사용할 수 있도록 추가했습니다.
+- OSM/Kakao 전환 시 현재 지도 중심과 줌 레벨을 동기화하고, Roadview 도로선은 Roadview 모드에서만 표시합니다.
+- Kakao 일반 모드로 전환하면 Roadview 패널도 닫아 일반 지도와 Roadview 모드를 명확히 분리합니다.
+- Kakao 일반 전환 시 마지막 선택 객체가 지도 중심을 덮어쓰지 않도록 분리하고, OSM 줌과 Kakao level 변환값을 보정했습니다.
+- Roadview 사용 후 Kakao/OSM으로 돌아갈 때 숨겨진 지도에서 좌표를 읽지 않고, 마지막 정상 지도 view를 저장해 복원합니다.
+- Kakao 지도에도 현재/신규/변경/삭제 검토 보호구역 오버레이를 표시하고, 체크박스 레이어 상태를 동일하게 반영합니다.
+- Roadview 패널은 on/off 및 드래그 이동이 가능하며, 데스크톱에서는 왼쪽 현황 패널을 침범하지 않도록 제한합니다.
+- Roadview 내부 이동 시 Kakao 지도 마커와 중심 위치가 함께 갱신됩니다.
+- 지도 범례는 OSM/Kakao/Roadview 전환 패널 아래에 배치합니다.
 - GitHub Pages 배포 시 repository secret `KAKAO_JS_KEY`를 읽어 `dashboard/config.js`를 생성합니다.
 - 대시보드 데이터 export에 `facility_type_code`가 포함되도록 DB export 쿼리를 수정했습니다.
 - 대시보드 정적 데이터는 2026-07-07 기준선 정책을 적용해 재생성했습니다.
@@ -115,9 +123,33 @@ node --check dashboard\app.js
 
 현재 기대 버전:
 
-- `styles.css?v=20260724-1`
-- `config.js?v=20260724-1`
-- `app.js?v=20260724-1`
+- `styles.css?v=20260724-10`
+- `config.js?v=20260724-10`
+- `app.js?v=20260724-10`
+
+Kakao layer update:
+
+- Kakao Point overlays now use pixel-based `CustomOverlay` markers instead of meter-radius circles.
+- Kakao current/change Point results should remain visible like OSM markers across zoom levels.
+- Kakao Polygon overlays, layer toggles, popups, and Roadview buttons remain enabled.
+
+Roadview panel update:
+
+- Roadview panel is clamped inside the map area when opened, dragged, or after resize.
+- On desktop it cannot cross into the left dashboard panel.
+- On mobile it is kept above the bottom dashboard panel.
+- Roadview panel can be resized from the bottom-right handle with map-area bounds.
+
+Roadview exploration update:
+
+- In Roadview mode, clicking the Kakao map searches nearby Roadview imagery for the clicked location.
+- Roadview search expands from 100m to 300m before reporting no nearby Roadview.
+- Roadview position changes keep the Kakao marker and map center synchronized.
+
+Legend layout update:
+
+- On mobile, the legend is aligned under the map mode switcher instead of floating on the opposite side.
+- Legend width is constrained so it stays inside the map viewport.
 
 Kakao 설정 확인:
 
