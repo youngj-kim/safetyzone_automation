@@ -12,4 +12,5 @@ def test_daily_workflow_uses_dispatch_and_quality_gate() -> None:
     assert "python -m safety_zone_monitor quality-report" in workflow
     assert "actions/setup-python" not in workflow
     assert "python --version" in workflow
-    assert "SGG_CODES_FILE: ${{ vars.SGG_CODES_FILE }}" in workflow
+    assert "sgg_codes_file:" in workflow
+    assert "SGG_CODES_FILE: ${{ inputs.sgg_codes_file || vars.SGG_CODES_FILE }}" in workflow

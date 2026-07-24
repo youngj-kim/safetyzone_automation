@@ -43,6 +43,29 @@ SGG_CODES_FILE=config/sgg_codes_nationwide.txt
 
 두 값이 모두 있으면 합쳐서 실행되므로 전환할 때 기존 값을 반드시 확인한다.
 
+## 전국 수집 청크 실행
+
+공공 API 429 rate limit 때문에 전국 269개 시군구를 한 번에 실행하면 중간 실패 시
+그 실행 전체가 DB에 반영되지 않을 수 있다. 전국 기준선 또는 전국 보강 수집은 다음
+청크 파일을 하나씩 수동 실행한다.
+
+```text
+config/sgg_chunks/nationwide_chunk_01.txt
+config/sgg_chunks/nationwide_chunk_02.txt
+config/sgg_chunks/nationwide_chunk_03.txt
+config/sgg_chunks/nationwide_chunk_04.txt
+config/sgg_chunks/nationwide_chunk_05.txt
+config/sgg_chunks/nationwide_chunk_06.txt
+```
+
+GitHub Actions의 `Daily safety-zone monitor`에서 `Run workflow`를 누른 뒤
+`sgg_codes_file`에 실행할 청크 파일 경로를 입력한다. `notification_test`는 `false`로
+둔다. 청크 사이에는 API 제한 회복을 위해 충분한 간격을 둔다.
+
+청크 실행은 성공한 시군구 범위만 DB에 반영되므로, 전국 전체 실행보다 실패 복구가 쉽다.
+0건을 반환한 시군구는 삭제 판정 범위에서 제외해 기존 데이터를 대량 삭제로 오인하지
+않는다.
+
 ## 실행 순서
 
 1. 저장소 체크아웃

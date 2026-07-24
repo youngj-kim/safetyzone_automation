@@ -26,6 +26,7 @@ docs/automation_room_handoff.md 확인해서 지금까지 개발진행한거 커
 - 대시보드 export에 포함되는 실패 메시지는 `serviceKey`, `token` 등 민감 쿼리 파라미터를 마스킹합니다.
 - 대시보드 데이터 export에 `facility_type_code`가 포함되도록 DB export 쿼리를 수정했습니다.
 - 대시보드 정적 데이터는 2026-07-07 기준선 정책을 적용해 재생성했습니다.
+- 전국 수집은 API 429를 피하기 위해 `config/sgg_chunks/nationwide_chunk_*.txt` 청크 파일로 나눠 실행할 수 있습니다.
 
 ## 보호구역 종류 매핑
 
@@ -59,6 +60,8 @@ docs/automation_room_handoff.md 확인해서 지금까지 개발진행한거 커
 - `src/safety_zone_monitor/cli.py`
 - `src/safety_zone_monitor/migrations/013_facility_point_absence_tracking.sql`
 - `config/sgg_codes_nationwide.txt`
+- `config/sgg_chunks/*.txt`
+- `.github/workflows/daily-monitor.yml`
 - 관련 문서 파일
 
 ## 커밋 제외 대상
@@ -111,7 +114,9 @@ node --check dashboard\app.js
 ## 전국 기준선 상태
 
 - 전국 수집용 `config/sgg_codes_nationwide.txt`는 생성되어 있습니다.
+- 전국 청크 수집용 `config/sgg_chunks/nationwide_chunk_01.txt`부터 `nationwide_chunk_06.txt`까지 생성되어 있습니다.
 - GitHub Actions repository variable은 `SGG_CODES_FILE=config/sgg_codes_nationwide.txt`로 설정되어 있습니다.
+- GitHub Actions 수동 실행 시 `sgg_codes_file` 입력값으로 청크 파일 경로를 지정하면 해당 범위만 실행합니다.
 - 전국 기준선 DB 등록은 아직 완료되지 않았습니다.
 - 공공 API 429 rate limit 때문에 재시도가 필요합니다.
 - 전국 통판 등록 시에는 2026-07-07 기준 API에 이미 존재했던 시설을 `신규`로 취급하지 않는 정책을 유지합니다.
