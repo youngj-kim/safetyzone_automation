@@ -29,19 +29,22 @@ Settings → Secrets and variables → Actions에서 다음을 설정한다.
 
 ### Variables
 
-소규모 시험은 다음처럼 직접 지정한다.
+소규모 시험만 할 때는 다음처럼 직접 지정할 수 있다.
 
 ```text
 SGG_CODES=11110
 ```
 
-전국 코드 파일을 저장소에 반영한 뒤에는 다음을 사용하고 `SGG_CODES`는 비운다.
+현재 기본 운영 설정은 전국 시군구 코드 파일을 사용하는 방식이다. 저장소 변수에는 다음을
+둔다.
 
 ```text
 SGG_CODES_FILE=config/sgg_codes_nationwide.txt
 ```
 
-두 값이 모두 있으면 합쳐서 실행되므로 전환할 때 기존 값을 반드시 확인한다.
+`SGG_CODES`와 `SGG_CODES_FILE`을 동시에 지정하면 합쳐서 실행되므로, 전환할 때 기존
+값을 반드시 확인한다. 전국 청크를 수동 실행할 때는 repository variable을 바꾸지 않고
+workflow dispatch 입력값 `sgg_codes_file`만 사용한다.
 
 ## 전국 수집 청크 실행
 
@@ -65,6 +68,10 @@ GitHub Actions의 `Daily safety-zone monitor`에서 `Run workflow`를 누른 뒤
 청크 실행은 성공한 시군구 범위만 DB에 반영되므로, 전국 전체 실행보다 실패 복구가 쉽다.
 0건을 반환한 시군구는 삭제 판정 범위에서 제외해 기존 데이터를 대량 삭제로 오인하지
 않는다.
+
+전국 청크 실행이 모두 끝난 뒤 대시보드에 반영하려면 운영 DB에서 dashboard data를 다시
+export하고, 변경된 `dashboard/data/*.json`, `dashboard/data/*.geojson`을 커밋한 뒤
+GitHub Pages 배포를 진행한다.
 
 ## 실행 순서
 

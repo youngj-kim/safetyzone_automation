@@ -12,6 +12,8 @@
 |---|---|
 | 전체 구조를 빠르게 다시 잡을 때 | `README.md` |
 | 현재 진행 상태를 확인할 때 | `docs/mvp_project_status.md` |
+| 1번방에서 커밋/푸시/대시보드 배포 인수인계를 받을 때 | `docs/automation_room_handoff.md` |
+| 배포된 대시보드와 전국 기준선 범위를 확인할 때 | `docs/project_scope_nationwide_dashboard_20260723.md` |
 | safetyzone이 표준노드링크 DB를 어떻게 쓰는지 볼 때 | `docs/standard_node_link_db_contract.md` |
 | DB 컨테이너, PostGIS, 백업/복원, 서버 이전을 볼 때 | `D:\standard-node-link-postgis\docs\db_operations_runbook.md` |
 | 보호구역 DB 테이블 의미를 볼 때 | `docs/database_table_guide.md` |
@@ -20,13 +22,14 @@
 
 | 채팅방 역할 | 관련 문서 |
 |---|---|
-| 1번 자동화 설계 | `docs/document_hub.md`, `README.md`, `docs/mvp_project_status.md` |
+| 1번 자동화 설계 | `docs/document_hub.md`, `README.md`, `docs/mvp_project_status.md`, `docs/automation_room_handoff.md` |
 | DB 구축 및 운영 | `docs/standard_node_link_db_contract.md`, `D:\standard-node-link-postgis\docs\db_operations_runbook.md` |
 | 5번 NGII 도로중심선 PostGIS | `docs/ngii_road_centerline_postgis.md` |
 | 보호구역 수집/변경 감지 자동화 | `README.md`, `docs/database_table_guide.md`, `docs/change_event_verification.md` |
 | 자동 실행/스케줄링 | `docs/daily_automation.md`, `docs/windows_scheduler_github_dispatch.md` |
 | 알림 | `docs/telegram_notification_setup.md` |
-| 전국 전환 | `docs/nationwide_rollout.md`, `docs/seoul_rollout_validation_20260707.md` |
+| 전국 전환 | `docs/nationwide_rollout.md`, `docs/nationwide_baseline_rollout_policy_20260723.md`, `docs/project_scope_nationwide_dashboard_20260723.md`, `docs/seoul_rollout_validation_20260707.md` |
+| 대시보드 배포 | `README.md`, `docs/automation_room_handoff.md`, `.github/workflows/pages.yml` |
 | 링크 매칭 검토 | `docs/standard_link_matching_design.md`, `docs/standard_link_matching_v23_review_policy.md` |
 | QGIS 검토 | `docs/qgis_style_guide_for_link_matching.md` |
 
@@ -52,6 +55,8 @@ DB 관련 문서는 두 저장소에 나뉘어 있다.
 
 - `README.md`: 프로젝트 개요, 기존 DB 계약, 실행 순서
 - `docs/mvp_project_status.md`: 현재 MVP 진행 상태
+- `docs/document_hub.md`: 문서 탐색 중앙 입구
+- `docs/automation_room_handoff.md`: 1번방 커밋, 푸시, GitHub Pages 배포 인수인계
 - `docs/m0_inventory_report.md`: 기존 표준노드링크 환경 감사 결과
 - `표준노드링크_보호구역_자동화_Codex_인수인계_20260706.docx`: 인수인계 문서
 
@@ -72,6 +77,15 @@ DB 관련 문서는 두 저장소에 나뉘어 있다.
 - `docs/e2e_test_20260706.md`: 종로구 E2E 테스트 결과
 - `docs/seoul_rollout_validation_20260707.md`: 서울 전환 검증
 - `docs/nationwide_rollout.md`: 전국 수집 전환 절차
+- `docs/nationwide_baseline_rollout_policy_20260723.md`: 전국 기준선 적재 정책
+- `docs/project_scope_nationwide_dashboard_20260723.md`: 전국 대시보드 공개 범위와 기준선 정책
+
+### 대시보드와 배포
+
+- `dashboard/`: GitHub Pages에 배포되는 정적 대시보드
+- `.github/workflows/pages.yml`: `dashboard/`를 `https://safetyzone.yjkim.dev`로 배포
+- `dashboard/data/*.json`, `dashboard/data/*.geojson`: 공개 정적 대시보드 데이터
+- `dashboard/config.js`: 배포 시 `KAKAO_JS_KEY`로 생성되는 로컬/런타임 설정 파일. 커밋하지 않음
 
 ### 보호구역 모델
 
@@ -117,3 +131,10 @@ NGII 도로중심선 PostGIS 작업은 다음 순서로 본다.
 1. `docs/ngii_road_centerline_postgis.md`
 2. `docs/standard_node_link_db_contract.md`
 3. `D:\standard-node-link-postgis\docs\db_operations_runbook.md`
+
+대시보드 배포 작업은 다음 순서로 본다.
+
+1. `docs/automation_room_handoff.md`
+2. `README.md`의 대시보드와 지도 섹션
+3. `.github/workflows/pages.yml`
+4. `https://safetyzone.yjkim.dev`
