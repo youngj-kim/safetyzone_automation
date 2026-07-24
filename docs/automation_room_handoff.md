@@ -123,9 +123,9 @@ node --check dashboard\app.js
 
 현재 기대 버전:
 
-- `styles.css?v=20260724-13`
-- `config.js?v=20260724-13`
-- `app.js?v=20260724-13`
+- `styles.css?v=20260724-14`
+- `config.js?v=20260724-14`
+- `app.js?v=20260724-14`
 
 Kakao layer update:
 
@@ -167,6 +167,11 @@ Roadview toggle update:
 - The top Roadview map-mode button now toggles Roadview on/off.
 - Roadview can be enabled even when no feature is selected; clicking the Kakao map then searches nearby Roadview.
 - Popup Roadview buttons still open Roadview for the selected feature.
+
+Initial map view update:
+
+- OSM and Kakao initial map view now start at Seoul Station (`37.5547, 126.9707`) with zoom 13.
+- The startup `fitBounds()` over all layers was removed so the first screen is not recentered away from Seoul.
 
 Kakao 설정 확인:
 

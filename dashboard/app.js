@@ -1,6 +1,12 @@
+const INITIAL_VIEW = {
+  lat: 37.5547,
+  lng: 126.9707,
+  zoom: 13,
+};
+
 const map = L.map("map", {
   preferCanvas: true,
-}).setView([36.4, 127.8], 7);
+}).setView([INITIAL_VIEW.lat, INITIAL_VIEW.lng], INITIAL_VIEW.zoom);
 window.dashboardMap = map;
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -26,7 +32,10 @@ const state = {
   currentLayers: new Map(),
   currentFeatures: new Map(),
   selectedLocation: null,
-  lastOsmView: { lat: 36.4, lng: 127.8, zoom: 7 },
+  lastOsmView: {
+    ...INITIAL_VIEW,
+    level: leafletZoomToKakaoLevel(INITIAL_VIEW.zoom),
+  },
   lastKakaoView: null,
   kakao: {
     enabled: false,
@@ -43,7 +52,7 @@ const state = {
   polygonDeletedManageNos: new Set(),
   currentGroups: new Map(),
 };
-document.body.dataset.dashboardVersion = "20260724-13";
+document.body.dataset.dashboardVersion = "20260724-14";
 
 const dashboardConfig = window.SAFETYZONE_CONFIG || {};
 const queryParams = new URLSearchParams(window.location.search);
@@ -1399,13 +1408,6 @@ async function main() {
   renderEvents();
   renderCurrentItems();
 
-  const allMapLayers = Object.values(layerGroups)
-    .flatMap((group) => Object.values(group._layers))
-    .filter((layer) => !layer.getLayers || layer.getLayers().length > 0);
-  const allLayers = L.featureGroup(allMapLayers);
-  if (allLayers.getLayers().length) {
-    map.fitBounds(allLayers.getBounds().pad(0.1));
-  }
   requestAnimationFrame(() => map.invalidateSize());
 }
 
