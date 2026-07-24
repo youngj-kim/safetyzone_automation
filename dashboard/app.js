@@ -43,7 +43,7 @@ const state = {
   polygonDeletedManageNos: new Set(),
   currentGroups: new Map(),
 };
-document.body.dataset.dashboardVersion = "20260724-10";
+document.body.dataset.dashboardVersion = "20260724-13";
 
 const dashboardConfig = window.SAFETYZONE_CONFIG || {};
 const queryParams = new URLSearchParams(window.location.search);
@@ -320,6 +320,23 @@ function setSelectedLocation(latlng, props = {}) {
   syncKakaoLocation({ pan: true });
 }
 
+function isMobileLayout() {
+  return window.matchMedia("(max-width: 900px)").matches;
+}
+
+function setPanelCollapsed(collapsed) {
+  const shouldCollapse = Boolean(collapsed) && isMobileLayout();
+  document.body.classList.toggle("panel-collapsed", shouldCollapse);
+  const button = document.querySelector(".panel-toggle");
+  if (!button) return;
+  button.setAttribute("aria-expanded", String(!shouldCollapse));
+  button.textContent = shouldCollapse ? "현황판 열기" : "현황판 접기";
+}
+
+function collapsePanelForMapFocus() {
+  if (isMobileLayout()) setPanelCollapsed(true);
+}
+
 function leafletZoomToKakaoLevel(zoom) {
   return Math.max(1, Math.min(14, 18 - Math.round(zoom || 7)));
 }
@@ -434,7 +451,21 @@ function openKakaoInfo(feature, props, position) {
   if (!state.kakao.infoWindow || !position) return;
   setSelectedLocation({ lat: position.getLat(), lng: position.getLng() }, props);
   state.kakao.infoWindow.setContent(`<div class="kakao-info">${popupContent(props)}</div>`);
-  state.kakao.infoWindow.open(state.kakao.map, position);
+  state.kakao.infoWindow.setPosition(position);
+  state.kakao.infoWindow.open(state.kakao.map);
+}
+
+function focusKakaoFeature(feature, props, bounds) {
+  if (!state.kakao.enabled || !feature) return false;
+  const position = kakaoPointFromFeature(feature);
+  if (!position) return false;
+  state.kakao.map.setCenter(position);
+  if (feature.geometry?.type === "Point" || bounds?.getNorthEast?.().equals(bounds.getSouthWest())) {
+    state.kakao.map.setLevel(Math.min(state.kakao.map.getLevel(), 3));
+  }
+  openKakaoInfo(feature, props, position);
+  state.lastKakaoView = currentKakaoView();
+  return true;
 }
 
 function createKakaoPointMarker(feature, props, position, style) {
@@ -752,14 +783,16 @@ async function setMapMode(mode) {
 
 async function openRoadview() {
   const location = state.selectedLocation;
+  collapsePanelForMapFocus();
   setRoadviewPanelVisible(true);
-  if (!location) {
-    showRoadviewStatus("먼저 보호구역 또는 변경 항목을 선택하세요.");
-    return;
-  }
 
   try {
     await setMapMode("roadview");
+    if (!location) {
+      document.getElementById("roadview-title").textContent = "로드뷰";
+      showRoadviewStatus("지도에서 위치를 클릭하면 주변 로드뷰를 찾습니다.");
+      return;
+    }
     document.getElementById("roadview-title").textContent = location.title;
     const position = new kakao.maps.LatLng(location.lat, location.lng);
     moveRoadviewToPosition(position, "가장 가까운 로드뷰를 찾는 중입니다.");
@@ -767,6 +800,15 @@ async function openRoadview() {
     showRoadviewStatus("Kakao JavaScript 키와 도메인 등록이 필요합니다.");
     console.warn(error);
   }
+}
+
+async function toggleRoadview() {
+  if (document.body.dataset.mapMode === "roadview") {
+    setRoadviewPanelVisible(false);
+    await setMapMode("kakao");
+    return;
+  }
+  await openRoadview();
 }
 
 function ensureLayerVisible(category) {
@@ -800,8 +842,13 @@ function focusEvent(event) {
   };
   document.body.dataset.lastFocus = JSON.stringify(window.dashboardLastFocus);
   if (!bounds?.isValid()) return;
+  collapsePanelForMapFocus();
   const center = bounds.getCenter();
   setSelectedLocation(center, event);
+  if (document.body.dataset.mapMode !== "osm" && focusKakaoFeature(feature, event, bounds)) {
+    document.body.dataset.lastPopup = key;
+    return;
+  }
   if (feature?.geometry?.type === "Point" || bounds.getNorthEast().equals(bounds.getSouthWest())) {
     map.setView(center, Math.max(map.getZoom(), 17), { animate: true });
   } else {
@@ -835,8 +882,13 @@ function focusCurrentItem(item) {
   };
   document.body.dataset.lastFocus = JSON.stringify(window.dashboardLastFocus);
   if (!bounds?.isValid()) return;
+  collapsePanelForMapFocus();
   const center = bounds.getCenter();
   setSelectedLocation(center, item);
+  if (document.body.dataset.mapMode !== "osm" && focusKakaoFeature(feature, item, bounds)) {
+    document.body.dataset.lastPopup = key;
+    return;
+  }
   if (item.layer_type === "Point" || bounds.getNorthEast().equals(bounds.getSouthWest())) {
     map.setView(center, Math.max(map.getZoom(), 17), { animate: true });
   } else {
@@ -1204,11 +1256,14 @@ function bindMapTools() {
   map.on("moveend zoomend", () => {
     if (!document.getElementById("map").hidden) state.lastOsmView = currentOsmView();
   });
+  document.querySelector(".panel-toggle").addEventListener("click", () => {
+    setPanelCollapsed(!document.body.classList.contains("panel-collapsed"));
+  });
   document.querySelectorAll(".map-mode-button[data-map-mode]").forEach((button) => {
     if (button.classList.contains("roadview-action")) return;
     button.addEventListener("click", () => setMapMode(button.dataset.mapMode));
   });
-  document.querySelector(".roadview-action").addEventListener("click", openRoadview);
+  document.querySelector(".roadview-action").addEventListener("click", toggleRoadview);
   document.addEventListener("click", (event) => {
     if (event.target.closest(".popup-roadview-button")) openRoadview();
   });
@@ -1355,6 +1410,7 @@ async function main() {
 }
 
 function relayoutMaps() {
+  if (!isMobileLayout()) setPanelCollapsed(false);
   map.invalidateSize();
   const roadviewPanel = document.querySelector(".roadview-panel");
   if (roadviewPanel && !roadviewPanel.hidden) {

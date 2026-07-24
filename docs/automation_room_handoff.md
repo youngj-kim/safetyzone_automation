@@ -123,9 +123,9 @@ node --check dashboard\app.js
 
 현재 기대 버전:
 
-- `styles.css?v=20260724-10`
-- `config.js?v=20260724-10`
-- `app.js?v=20260724-10`
+- `styles.css?v=20260724-13`
+- `config.js?v=20260724-13`
+- `app.js?v=20260724-13`
 
 Kakao layer update:
 
@@ -150,6 +150,23 @@ Legend layout update:
 
 - On mobile, the legend is aligned under the map mode switcher instead of floating on the opposite side.
 - Legend width is constrained so it stays inside the map viewport.
+
+Mobile panel update:
+
+- Mobile dashboard panel can be collapsed and reopened with the map overlay toggle button.
+- Selecting an event/current object or opening Roadview automatically collapses the dashboard panel.
+- Mobile map controls, legend, metrics, and bottom panel spacing were compacted to preserve map viewing area.
+
+Kakao popup update:
+
+- Kakao InfoWindow now opens at the selected feature coordinate with the same `popupContent()` used by OSM.
+- Selecting an event/current item while Kakao or Roadview mode is active opens the Kakao feature popup instead of a hidden Leaflet popup.
+
+Roadview toggle update:
+
+- The top Roadview map-mode button now toggles Roadview on/off.
+- Roadview can be enabled even when no feature is selected; clicking the Kakao map then searches nearby Roadview.
+- Popup Roadview buttons still open Roadview for the selected feature.
 
 Kakao 설정 확인:
 
