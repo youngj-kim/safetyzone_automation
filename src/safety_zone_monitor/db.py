@@ -235,7 +235,7 @@ class Repository:
         return run_id
 
     def mark_failed(self, run_id: uuid.UUID, error: Exception) -> None:
-        message = f"{type(error).__name__}: {error}"[:4000]
+        message = sanitize_error_message(f"{type(error).__name__}: {error}")[:4000]
         with self._connect() as connection:
             connection.execute(
                 "UPDATE ops.pipeline_run SET status = 'FAILED', finished_at = now(), "
