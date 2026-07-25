@@ -35,6 +35,20 @@ def sanitize_error_message(message: str | None) -> str | None:
     return SENSITIVE_QUERY_PARAM_PATTERN.sub(r"\1[REDACTED]", message)
 
 
+def classify_sgg_coverage(
+    expected_sgg_codes: tuple[str, ...],
+    current_sgg_codes: tuple[str, ...],
+    raw_sgg_codes: tuple[str, ...],
+) -> dict[str, tuple[str, ...]]:
+    """Classify expected SGG codes missing from current rows."""
+    missing = sorted(set(expected_sgg_codes) - set(current_sgg_codes))
+    raw_code_set = set(raw_sgg_codes)
+    return {
+        "critical": tuple(code for code in missing if code in raw_code_set),
+        "without_raw_rows": tuple(code for code in missing if code not in raw_code_set),
+    }
+
+
 @dataclass(frozen=True)
 class RunSummary:
     run_id: uuid.UUID
@@ -169,6 +183,18 @@ class Repository:
                     ") AS scope ORDER BY sgg_code"
                 ).fetchall()
             )
+            raw_sgg_codes = tuple(
+                row[0]
+                for row in (
+                    connection.execute(
+                        "SELECT DISTINCT sgg_code FROM raw.police_zone_item_snapshot "
+                        "WHERE run_id = %s AND sgg_code IS NOT NULL ORDER BY sgg_code",
+                        (latest[0],),
+                    ).fetchall()
+                    if latest
+                    else ()
+                )
+            )
             duplicate_zone_manage_nos = connection.execute(
                 "SELECT COUNT(*) FROM (SELECT source_manage_no "
                 "FROM analysis.zone_current WHERE source_manage_no IS NOT NULL "
@@ -192,7 +218,11 @@ class Repository:
                 "SELECT COUNT(*) FROM analysis.zone_facility_point_current "
                 "WHERE ST_IsEmpty(geom) OR NOT ST_IsValid(geom) OR ST_SRID(geom) <> 5179"
             ).fetchone()[0]
-            missing_sgg_codes = sorted(set(expected_sgg_codes) - set(current_sgg_codes))
+            sgg_coverage = classify_sgg_coverage(
+                expected_sgg_codes,
+                current_sgg_codes,
+                raw_sgg_codes,
+            )
             connection.rollback()
 
         critical_counts = {
@@ -200,7 +230,7 @@ class Repository:
             "duplicate_point_manage_nos": duplicate_point_manage_nos,
             "invalid_polygons": invalid_polygons,
             "invalid_points": invalid_points,
-            "missing_expected_sgg_codes": len(missing_sgg_codes),
+            "missing_expected_sgg_codes": len(sgg_coverage["critical"]),
         }
         return {
             "status": "PASS" if not any(critical_counts.values()) else "FAIL",
@@ -212,9 +242,17 @@ class Repository:
             "current_counts": current_counts,
             "current_sgg_count": len(current_sgg_codes),
             "current_sgg_codes": current_sgg_codes,
+            "latest_raw_sgg_count": len(raw_sgg_codes),
+            "latest_raw_sgg_codes": raw_sgg_codes,
             "critical_checks": critical_counts,
-            "missing_expected_sgg_codes": missing_sgg_codes,
-            "warnings": {"point_groups_without_polygon": orphan_point_groups},
+            "missing_expected_sgg_codes": sgg_coverage["critical"],
+            "expected_sgg_codes_without_current_rows": sgg_coverage["without_raw_rows"],
+            "warnings": {
+                "point_groups_without_polygon": orphan_point_groups,
+                "expected_sgg_codes_without_current_rows": len(
+                    sgg_coverage["without_raw_rows"]
+                ),
+            },
         }
 
     def create_run(self, sgg_codes: tuple[str, ...], source_endpoint: str) -> uuid.UUID:
