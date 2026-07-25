@@ -73,6 +73,22 @@ GitHub Actions의 `Daily safety-zone monitor`에서 `Run workflow`를 누른 뒤
 export하고, 변경된 `dashboard/data/*.json`, `dashboard/data/*.geojson`을 커밋한 뒤
 GitHub Pages 배포를 진행한다.
 
+## API 오류 유형
+
+API 호출 실패는 `ApiError` 메시지 앞에 유형을 붙여 기록한다. 대시보드의 모니터링 이력과
+GitHub Actions 로그에서 이 유형을 먼저 확인한다.
+
+| 유형 | 의미 | 기본 대응 |
+|---|---|---|
+| `RATE_LIMIT` | 429 또는 공공 API 호출 한도 초과 | 당일 추가 재시도 중단, 다음 날 또는 더 작은 청크로 재실행 |
+| `AUTH_ERROR` | 인증키 누락, 만료, 잘못된 키, GitHub Secret 미반영 | 공공데이터포털 키와 GitHub Secret `OPEN_API_SERVICE_KEY` 확인 |
+| `EMPTY_RESULT` | 해당 시군구가 0건 응답 | 삭제 판정에서 제외. 반복되면 warning으로 관리 |
+| `MALFORMED_RESPONSE` | JSON 구조, `response/body`, `totalCount` 등 응답 형식 이상 | API 일시 장애인지 확인 후 재실행. 반복되면 파서 보강 |
+| `INCOMPLETE_PAGE` | `totalCount`보다 실제 item 수가 부족한 페이지 응답 | 데이터 반영 중단이 정상. 같은 청크를 나중에 재실행 |
+| `TIMEOUT` | 요청 제한 시간 초과 | API 상태 확인 후 재실행. 반복되면 timeout/청크 크기 조정 |
+| `NETWORK_ERROR` | DNS, 연결 실패, 네트워크 단절 | runner PC 네트워크와 공공 API 접속 확인 |
+| `SERVER_ERROR` | 공공 API 5xx 응답 | API 서버 장애 가능성이 높으므로 시간을 두고 재실행 |
+
 ## 실행 순서
 
 1. 저장소 체크아웃

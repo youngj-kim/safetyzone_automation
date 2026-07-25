@@ -14,21 +14,80 @@ logger = logging.getLogger(__name__)
 
 
 class ApiError(RuntimeError):
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        category: str = "UNKNOWN",
+        sgg_code: str | None = None,
+        page_no: int | None = None,
+    ) -> None:
+        self.message = message
+        self.category = category
+        self.sgg_code = sgg_code
+        self.page_no = page_no
+        context = []
+        if sgg_code:
+            context.append(f"sgg={sgg_code}")
+        if page_no is not None:
+            context.append(f"page={page_no}")
+        prefix = f"[{category}]"
+        if context:
+            prefix += f"[{', '.join(context)}]"
+        super().__init__(f"{prefix} {message}")
+
+
+def _classify_open_api_error(result_code: str, result_message: str) -> str:
+    upper = f"{result_code} {result_message}".upper()
+    if "ERR_03" in upper or "NO DATA" in upper or "조회된 데이터가 없습니다" in result_message:
+        return "EMPTY_RESULT"
+    if any(token in upper for token in ("SERVICE_KEY", "AUTH", "KEY", "인증", "SERVICEKEY")):
+        return "AUTH_ERROR"
+    if any(token in upper for token in ("LIMIT", "LIMITED", "429", "초과", "제한")):
+        return "RATE_LIMIT"
+    return "OPEN_API_ERROR"
+
+
+def _classify_request_exception(exc: requests.RequestException) -> str:
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None)
+    if status_code == 429:
+        return "RATE_LIMIT"
+    if status_code in {401, 403}:
+        return "AUTH_ERROR"
+    if isinstance(exc, requests.Timeout):
+        return "TIMEOUT"
+    if isinstance(exc, requests.ConnectionError):
+        return "NETWORK_ERROR"
+    if status_code and 500 <= status_code <= 599:
+        return "SERVER_ERROR"
+    if status_code and 400 <= status_code <= 499:
+        return "HTTP_CLIENT_ERROR"
+    return "NETWORK_ERROR"
 
 
 def response_body(payload: Mapping[str, Any]) -> Mapping[str, Any]:
     response = payload.get("response")
     if not isinstance(response, Mapping):
-        raise ApiError("Open API response does not contain a response object")
+        raise ApiError(
+            "Open API response does not contain a response object",
+            category="MALFORMED_RESPONSE",
+        )
     header = response.get("header", {})
     if isinstance(header, Mapping):
         result_code = str(header.get("resultCode", "00"))
         if result_code not in {"00", "0"}:
-            raise ApiError(f"Open API error {result_code}: {header.get('resultMsg', 'unknown')}")
+            result_message = str(header.get("resultMsg", "unknown"))
+            raise ApiError(
+                f"Open API error {result_code}: {result_message}",
+                category=_classify_open_api_error(result_code, result_message),
+            )
     body = response.get("body")
     if not isinstance(body, Mapping):
-        raise ApiError("Open API response does not contain a body object")
+        raise ApiError(
+            "Open API response does not contain a body object",
+            category="MALFORMED_RESPONSE",
+        )
     return body
 
 
@@ -93,14 +152,31 @@ class SafetyZoneApiClient:
             )
             response.raise_for_status()
             payload = response.json()
-        except (requests.RequestException, ValueError) as exc:
-            raise ApiError(f"Failed to fetch {sgg_code} page {page_no}: {exc}") from exc
+        except requests.RequestException as exc:
+            raise ApiError(
+                f"Failed to fetch {sgg_code} page {page_no}: {exc}",
+                category=_classify_request_exception(exc),
+                sgg_code=sgg_code,
+                page_no=page_no,
+            ) from exc
+        except ValueError as exc:
+            raise ApiError(
+                f"Failed to parse JSON for {sgg_code} page {page_no}: {exc}",
+                category="MALFORMED_RESPONSE",
+                sgg_code=sgg_code,
+                page_no=page_no,
+            ) from exc
         if not isinstance(payload, Mapping):
-            raise ApiError(f"Unexpected response type for {sgg_code} page {page_no}")
+            raise ApiError(
+                f"Unexpected response type for {sgg_code} page {page_no}",
+                category="MALFORMED_RESPONSE",
+                sgg_code=sgg_code,
+                page_no=page_no,
+            )
         try:
             return response_body(payload)
         except ApiError as exc:
-            if self.allow_empty_result and "ERR_03" in str(exc):
+            if self.allow_empty_result and exc.category == "EMPTY_RESULT":
                 self.empty_result_sgg_codes.add(sgg_code)
                 logger.info("Fetched district=%s page=%s/0 items=0", sgg_code, page_no)
                 return {
@@ -108,7 +184,12 @@ class SafetyZoneApiClient:
                     "numOfRows": self.num_rows,
                     "items": {"item": []},
                 }
-            raise
+            raise ApiError(
+                exc.message,
+                category=exc.category,
+                sgg_code=sgg_code,
+                page_no=page_no,
+            ) from exc
 
     def fetch_district(self, sgg_code: str) -> list[dict[str, Any]]:
         records: list[dict[str, Any]] = []
@@ -119,9 +200,22 @@ class SafetyZoneApiClient:
             items = extract_items(body)
             records.extend(items)
             if "totalCount" not in body:
-                raise ApiError(f"Response for {sgg_code} is missing totalCount")
-            total_count = int(body["totalCount"])
-            actual_page_size = int(body.get("numOfRows") or self.num_rows)
+                raise ApiError(
+                    f"Response for {sgg_code} is missing totalCount",
+                    category="MALFORMED_RESPONSE",
+                    sgg_code=sgg_code,
+                    page_no=page_no,
+                )
+            try:
+                total_count = int(body["totalCount"])
+                actual_page_size = int(body.get("numOfRows") or self.num_rows)
+            except (TypeError, ValueError) as exc:
+                raise ApiError(
+                    f"Response for {sgg_code} has invalid pagination values",
+                    category="MALFORMED_RESPONSE",
+                    sgg_code=sgg_code,
+                    page_no=page_no,
+                ) from exc
             total_pages = max(1, math.ceil(total_count / max(actual_page_size, 1)))
             logger.info(
                 "Fetched district=%s page=%s/%s items=%s",
@@ -133,7 +227,10 @@ class SafetyZoneApiClient:
             if not items and len(records) < total_count:
                 raise ApiError(
                     f"Incomplete response for {sgg_code}: expected {total_count}, "
-                    f"received {len(records)}"
+                    f"received {len(records)}",
+                    category="INCOMPLETE_PAGE",
+                    sgg_code=sgg_code,
+                    page_no=page_no,
                 )
             if len(records) >= total_count:
                 break
@@ -143,7 +240,9 @@ class SafetyZoneApiClient:
         if total_pages is not None and len(records) < total_count:
             raise ApiError(
                 f"Incomplete response for {sgg_code}: expected {total_count}, "
-                f"received {len(records)}"
+                f"received {len(records)}",
+                category="INCOMPLETE_PAGE",
+                sgg_code=sgg_code,
             )
         return records
 
