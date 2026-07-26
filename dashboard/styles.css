@@ -236,6 +236,41 @@ body {
   line-height: 1.25;
 }
 
+.header-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.language-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfa;
+}
+
+.language-toggle button {
+  min-width: 34px;
+  min-height: 28px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.language-toggle button.active {
+  color: #fff;
+  background: var(--text);
+}
+
 .eyebrow,
 .muted {
   margin: 0;
@@ -347,6 +382,15 @@ input[type="checkbox"] {
   color: var(--muted);
   font-size: 12px;
   font-weight: 500;
+}
+
+.activity-tab .tab-label {
+  min-width: 0;
+  flex: 1 1 auto;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: left;
 }
 
 .activity-tab.active {
@@ -463,6 +507,11 @@ input[type="checkbox"] {
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.name-original {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .badge {

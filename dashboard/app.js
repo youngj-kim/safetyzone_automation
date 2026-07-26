@@ -36,6 +36,7 @@ const state = {
   currentSearchIndexLoading: null,
   selectedSido: "11",
   currentRegionLoading: null,
+  language: localStorage.getItem("dashboardLanguage") || "ko",
   selectedLocation: null,
   lastOsmView: {
     ...INITIAL_VIEW,
@@ -59,7 +60,7 @@ const state = {
   currentGroups: new Map(),
   changeSummaryBySido: null,
 };
-document.body.dataset.dashboardVersion = "20260726-1";
+document.body.dataset.dashboardVersion = "20260726-2";
 
 const dashboardConfig = window.SAFETYZONE_CONFIG || {};
 const queryParams = new URLSearchParams(window.location.search);
@@ -69,13 +70,296 @@ const kakaoJavascriptKey =
   document.body.dataset.kakaoKey ||
   "";
 
+const I18N = {
+  ko: {
+    appTitle: "보호구역 변경 현황",
+    loadingData: "데이터를 불러오는 중",
+    sgg: "시군구",
+    child: "어린이",
+    senior: "노인",
+    disabled: "장애인",
+    other: "기타",
+    new: "신규",
+    changed: "변경",
+    review: "삭제(검토)",
+    recentChanges: "최근 변경",
+    currentObjects: "현재 객체",
+    monitoringRuns: "모니터링 이력",
+    searchPlaceholder: "시설명, 관리번호, 시군구 검색",
+    allChangeStatus: "전체 변경 상태",
+    attributeChanged: "속성변경",
+    geometryChanged: "도형변경",
+    geometryAttributeChanged: "도형+속성변경",
+    pointChanged: "위치변경",
+    pointAttributeChanged: "위치+속성변경",
+    deleted: "삭제",
+    missingReview: "누락 검토",
+    allZoneTypes: "전체 보호구역 종류",
+    panelOpen: "현황판 열기",
+    panelClose: "현황판 접기",
+    roadview: "로드뷰",
+    roadviewHint: "보호구역을 선택하면 로드뷰를 확인할 수 있습니다.",
+    latestRun: "최근 실행",
+    noRuns: "실행 이력이 없습니다",
+    countSuffix: "건",
+    collected: "수집",
+    polygonChanged: "Polygon 변경",
+    pointChangedCount: "Point 변경",
+    failureReason: "실패 사유",
+    noName: "이름 없음",
+    moveToLocation: "위치로 이동",
+    type: "종류",
+    manageNo: "관리번호",
+    group: "그룹",
+    detected: "감지",
+    updated: "시스템 갱신",
+    apiFirst: "API 최초등록",
+    apiLast: "API 최종수정",
+    reviewLabel: "검토",
+    kakaoRoadview: "카카오 로드뷰",
+    noRegion: "선택된 지역이 없습니다.",
+    noChangesAfterBaseline: "기준선 이후 전국 변경 이벤트가 없습니다.",
+  },
+  en: {
+    appTitle: "Safety Zone Changes",
+    loadingData: "Loading data",
+    sgg: "District",
+    child: "Child",
+    senior: "Senior",
+    disabled: "Disabled",
+    other: "Other",
+    new: "New",
+    changed: "Changed",
+    review: "Deleted/Review",
+    recentChanges: "Recent Changes",
+    currentObjects: "Current Objects",
+    monitoringRuns: "Monitoring Runs",
+    searchPlaceholder: "Search facility, management no., district",
+    allChangeStatus: "All Change Status",
+    attributeChanged: "Attribute Changed",
+    geometryChanged: "Geometry Changed",
+    geometryAttributeChanged: "Geometry + Attribute Changed",
+    pointChanged: "Location Changed",
+    pointAttributeChanged: "Location + Attribute Changed",
+    deleted: "Deleted",
+    missingReview: "Missing Review",
+    allZoneTypes: "All Safety Zone Types",
+    panelOpen: "Open Panel",
+    panelClose: "Collapse Panel",
+    roadview: "Roadview",
+    roadviewHint: "Select a safety zone to inspect Roadview imagery.",
+    latestRun: "Latest Run",
+    noRuns: "No monitoring runs",
+    countSuffix: "",
+    collected: "Fetched",
+    polygonChanged: "Polygon Changes",
+    pointChangedCount: "Point Changes",
+    failureReason: "Failure reason",
+    noName: "Unnamed",
+    moveToLocation: "Move to location",
+    type: "Type",
+    manageNo: "Management No.",
+    group: "Group",
+    detected: "Detected",
+    updated: "System Updated",
+    apiFirst: "API First Registered",
+    apiLast: "API Last Modified",
+    reviewLabel: "Review",
+    kakaoRoadview: "Kakao Roadview",
+    noRegion: "No region selected.",
+    noChangesAfterBaseline: "No nationwide change events after baseline.",
+  },
+};
+
+const CHANGE_LABELS = {
+  NEW: { ko: "신규", en: "New" },
+  ATTRIBUTE_CHANGED: { ko: "속성변경", en: "Attribute Changed" },
+  GEOMETRY_CHANGED: { ko: "도형변경", en: "Geometry Changed" },
+  GEOMETRY_ATTRIBUTE_CHANGED: { ko: "도형+속성변경", en: "Geometry + Attribute Changed" },
+  POINT_CHANGED: { ko: "위치변경", en: "Location Changed" },
+  POINT_ATTRIBUTE_CHANGED: { ko: "위치+속성변경", en: "Location + Attribute Changed" },
+  DELETED: { ko: "삭제", en: "Deleted" },
+  MISSING: { ko: "누락 검토", en: "Missing Review" },
+};
+
+const SIDO_NAME_EN = {
+  "11": "Seoul",
+  "12": "Jeollanam-do",
+  "26": "Busan",
+  "27": "Daegu",
+  "28": "Incheon",
+  "30": "Daejeon",
+  "31": "Ulsan",
+  "36": "Sejong",
+  "41": "Gyeonggi-do",
+  "43": "Chungcheongbuk-do",
+  "44": "Chungcheongnam-do",
+  "47": "Gyeongsangbuk-do",
+  "48": "Gyeongsangnam-do",
+  "50": "Jeju",
+  "51": "Gangwon State",
+  "52": "Jeonbuk State",
+};
+
+const FACILITY_SUFFIX_RULES = [
+  ["장애인복지관", "Welfare Center for Disabled People"],
+  ["노인복지관", "Senior Welfare Center"],
+  ["초등학교", "Elementary School"],
+  ["중학교", "Middle School"],
+  ["고등학교", "High School"],
+  ["유치원", "Kindergarten"],
+  ["어린이집", "Childcare Center"],
+  ["경로당", "Senior Center"],
+  ["복지관", "Welfare Center"],
+  ["학교", "School"],
+];
+
+const HANGUL_LEADS = [
+  "g",
+  "kk",
+  "n",
+  "d",
+  "tt",
+  "r",
+  "m",
+  "b",
+  "pp",
+  "s",
+  "ss",
+  "",
+  "j",
+  "jj",
+  "ch",
+  "k",
+  "t",
+  "p",
+  "h",
+];
+const HANGUL_VOWELS = [
+  "a",
+  "ae",
+  "ya",
+  "yae",
+  "eo",
+  "e",
+  "yeo",
+  "ye",
+  "o",
+  "wa",
+  "wae",
+  "oe",
+  "yo",
+  "u",
+  "wo",
+  "we",
+  "wi",
+  "yu",
+  "eu",
+  "ui",
+  "i",
+];
+const HANGUL_TAILS = [
+  "",
+  "k",
+  "k",
+  "ks",
+  "n",
+  "nj",
+  "nh",
+  "t",
+  "l",
+  "lk",
+  "lm",
+  "lb",
+  "ls",
+  "lt",
+  "lp",
+  "lh",
+  "m",
+  "p",
+  "ps",
+  "t",
+  "t",
+  "ng",
+  "t",
+  "t",
+  "k",
+  "t",
+  "p",
+  "t",
+];
+
+function t(key) {
+  return I18N[state.language]?.[key] || I18N.ko[key] || key;
+}
+
+function countText(value) {
+  const count = numberText(value);
+  return state.language === "ko" ? `${count}${t("countSuffix")}` : count;
+}
+
+function changeTypeLabel(type) {
+  return CHANGE_LABELS[type]?.[state.language] || type || "-";
+}
+
+function formatSidoName(regionOrCode) {
+  const code = typeof regionOrCode === "string" ? regionOrCode : regionOrCode?.sido_code;
+  const koName = typeof regionOrCode === "string" ? regionOrCode : regionOrCode?.sido_name;
+  return state.language === "en" ? SIDO_NAME_EN[code] || koName || code || "-" : koName || code || "-";
+}
+
+function romanizeHangul(text) {
+  return String(text || "")
+    .split("")
+    .map((char) => {
+      const code = char.charCodeAt(0) - 0xac00;
+      if (code < 0 || code > 11171) return char;
+      const lead = Math.floor(code / 588);
+      const vowel = Math.floor((code % 588) / 28);
+      const tail = code % 28;
+      return `${HANGUL_LEADS[lead]}${HANGUL_VOWELS[vowel]}${HANGUL_TAILS[tail]}`;
+    })
+    .join("");
+}
+
+function titleCaseRomanized(text) {
+  return romanizeHangul(text)
+    .replace(/[^A-Za-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`)
+    .join(" ");
+}
+
+function facilityNameEn(name) {
+  const rawName = String(name || "").trim();
+  if (!rawName) return "";
+  const rule = FACILITY_SUFFIX_RULES.find(([suffix]) => rawName.endsWith(suffix));
+  if (!rule) return titleCaseRomanized(rawName) || rawName;
+  const [suffix, englishSuffix] = rule;
+  const baseName = rawName.slice(0, -suffix.length).trim();
+  const romanizedBase = titleCaseRomanized(baseName);
+  return romanizedBase ? `${romanizedBase} ${englishSuffix}` : englishSuffix;
+}
+
+function facilityNameParts(props) {
+  const koName = props?.facility_name || t("noName");
+  if (state.language !== "en") return { primary: koName, secondary: "" };
+  const enName = facilityNameEn(koName);
+  return {
+    primary: enName || koName,
+    secondary: enName && enName !== koName ? koName : "",
+  };
+}
+
 function numberText(value) {
-  return Number(value || 0).toLocaleString("ko-KR");
+  return Number(value || 0).toLocaleString(state.language === "en" ? "en-US" : "ko-KR");
 }
 
 function formatDate(value) {
   if (!value) return "-";
-  return new Intl.DateTimeFormat("ko-KR", {
+  return new Intl.DateTimeFormat(state.language === "en" ? "en-US" : "ko-KR", {
     dateStyle: "short",
     timeStyle: "short",
   }).format(new Date(value));
@@ -145,6 +429,51 @@ function currentLayerKey(code) {
   if (normalized === "2") return "currentSenior";
   if (normalized === "3") return "currentDisabled";
   return "currentOther";
+}
+
+function runFailureReason(errorMessage) {
+  if (!errorMessage) return "";
+  const message = String(errorMessage);
+  if (message.includes("too many 429")) {
+    return state.language === "en"
+      ? "Open API request limit exceeded (429)"
+      : "공공 API 요청 제한(429)으로 수집 실패";
+  }
+  if (message.includes("ERR_03") || message.includes("조회된 데이터가 없습니다")) {
+    return state.language === "en" ? "Open API returned no data" : "공공 API 응답 데이터 없음";
+  }
+  if (message.includes("timeout") || message.includes("Timeout")) {
+    return state.language === "en" ? "Open API response timeout" : "공공 API 응답 시간 초과";
+  }
+  return message
+    .replace(/([?&](?:serviceKey|service_key|key|token)=)[^&\s]+/gi, "$1[REDACTED]")
+    .slice(0, 160);
+}
+
+function zoneTypeInfo(code) {
+  const normalized = String(code || "").trim();
+  const types = {
+    1: {
+      label: state.language === "en" ? "Child Safety Zone" : "어린이보호구역",
+      color: "#2563eb",
+      fillOpacity: 0.1,
+    },
+    2: {
+      label: state.language === "en" ? "Senior Safety Zone" : "노인보호구역",
+      color: "#be185d",
+      fillOpacity: 0.12,
+    },
+    3: {
+      label: state.language === "en" ? "Disabled Safety Zone" : "장애인보호구역",
+      color: "#0891b2",
+      fillOpacity: 0.12,
+    },
+  };
+  return types[normalized] || {
+    label: state.language === "en" ? "Other Safety Zone" : "보호구역 유형 미분류",
+    color: "#707985",
+    fillOpacity: 0.08,
+  };
 }
 
 function matchesZoneFilter(item, filterValue) {
@@ -304,6 +633,19 @@ function popupTimelineContent(props) {
   `;
 }
 
+function statusHintLabel(status) {
+  const labels = {
+    CURRENT: { ko: "현재 유지", en: "Current" },
+    NEW: { ko: "신규", en: "New" },
+    UPDATED: { ko: "변경 추적", en: "Updated" },
+    MISSING_REVIEW: { ko: "삭제 검토 1회", en: "Missing Review" },
+    DELETE_CANDIDATE: { ko: "반복 누락, 삭제 의심", en: "Repeated Missing" },
+    DELETED_CONFIRMED: { ko: "삭제 확인", en: "Deleted Confirmed" },
+    RETURNED: { ko: "누락 후 재등장", en: "Returned" },
+  };
+  return labels[status]?.[state.language] || status || "";
+}
+
 function boundsFromFeature(feature) {
   if (!feature?.geometry) return null;
   if (feature.geometry.type === "Point") {
@@ -339,6 +681,18 @@ function setSelectedLocation(latlng, props = {}) {
   syncKakaoLocation({ pan: true });
 }
 
+function setSelectedLocation(latlng, props = {}) {
+  if (!latlng) return;
+  const names = facilityNameParts(props);
+  state.selectedLocation = {
+    lat: latlng.lat,
+    lng: latlng.lng,
+    title: names.primary || t("moveToLocation"),
+    props,
+  };
+  syncKakaoLocation({ pan: true });
+}
+
 function isMobileLayout() {
   return window.matchMedia("(max-width: 900px)").matches;
 }
@@ -349,7 +703,7 @@ function setPanelCollapsed(collapsed) {
   const button = document.querySelector(".panel-toggle");
   if (!button) return;
   button.setAttribute("aria-expanded", String(!shouldCollapse));
-  button.textContent = shouldCollapse ? "현황판 열기" : "현황판 접기";
+  button.textContent = shouldCollapse ? t("panelOpen") : t("panelClose");
 }
 
 function collapsePanelForMapFocus() {
@@ -492,7 +846,7 @@ function createKakaoPointMarker(feature, props, position, style) {
   marker.type = "button";
   marker.className = `kakao-point-marker${props.change_type ? " has-change" : ""}`;
   marker.style.setProperty("--marker-color", style.fillColor);
-  marker.title = props.facility_name || "Safety zone";
+  marker.title = facilityNameParts(props).primary || "Safety zone";
   marker.setAttribute("aria-label", marker.title);
   marker.addEventListener("click", (event) => {
     event.preventDefault();
@@ -842,6 +1196,38 @@ async function openRoadview() {
   }
 }
 
+async function openRoadview() {
+  const location = state.selectedLocation;
+  collapsePanelForMapFocus();
+  setRoadviewPanelVisible(true);
+
+  try {
+    await setMapMode("roadview");
+    if (!location) {
+      document.getElementById("roadview-title").textContent = t("roadview");
+      showRoadviewStatus(
+        state.language === "en"
+          ? "Click the Kakao map to search nearby Roadview imagery."
+          : "지도에서 위치를 클릭하면 주변 로드뷰를 찾습니다.",
+      );
+      return;
+    }
+    document.getElementById("roadview-title").textContent = location.title;
+    const position = new kakao.maps.LatLng(location.lat, location.lng);
+    moveRoadviewToPosition(
+      position,
+      state.language === "en" ? "Searching nearest Roadview imagery." : "가장 가까운 로드뷰를 찾는 중입니다.",
+    );
+  } catch (error) {
+    showRoadviewStatus(
+      state.language === "en"
+        ? "Kakao JavaScript domain configuration is required."
+        : "Kakao JavaScript 도메인 등록이 필요합니다.",
+    );
+    console.warn(error);
+  }
+}
+
 async function toggleRoadview() {
   if (document.body.dataset.mapMode === "roadview") {
     setRoadviewPanelVisible(false);
@@ -950,6 +1336,38 @@ async function focusCurrentSearchItem(item) {
 
 function popupContent(props) {
   const enriched = enrichReviewProperties(props);
+  const names = facilityNameParts(props);
+  const title = escapeHtml(names.primary);
+  const subtitle = names.secondary ? `<span class="name-original">${escapeHtml(names.secondary)}</span><br>` : "";
+  const type = props.change_type ? `<b>${changeTypeLabel(props.change_type)}</b><br>` : "";
+  const review = enriched.review_reason
+    ? `${t("reviewLabel")}: ${escapeHtml(enriched.review_reason)}<br>`
+    : "";
+  const zoneType = zoneTypeInfo(props.facility_type_code);
+  const apiDates =
+    props.api_first_registered_on || props.api_last_modified_on
+      ? `${t("apiFirst")}: ${formatApiDate(props.api_first_registered_on)}<br>
+    ${t("apiLast")}: ${formatApiDate(props.api_last_modified_on)}<br>`
+      : "";
+  return `
+    <strong>${title}</strong><br>
+    ${subtitle}
+    ${type}
+    ${t("type")}: ${zoneType.label}<br>
+    ${t("manageNo")}: ${props.source_manage_no || "-"}<br>
+    ${t("sgg")}: ${props.sgg_code || "-"}<br>
+    ${t("group")}: ${props.zone_group_id || "-"}<br>
+    ${apiDates}
+    ${review}
+    ${popupTimelineContent(props)}
+    ${props.detected_at ? `${t("detected")}: ${formatDate(props.detected_at)}<br>` : ""}
+    ${props.updated_at ? `${t("updated")}: ${formatDate(props.updated_at)}<br>` : ""}
+    <button class="popup-roadview-button" type="button">${t("kakaoRoadview")}</button>
+  `;
+}
+
+function popupContent(props) {
+  const enriched = enrichReviewProperties(props);
   const title = props.facility_name || "이름 없음";
   const type = props.change_type ? `<b>${props.change_type}</b><br>` : "";
   const review = enriched.review_reason ? `검토: ${enriched.review_reason}<br>` : "";
@@ -972,6 +1390,38 @@ function popupContent(props) {
     ${props.detected_at ? `감지: ${formatDate(props.detected_at)}<br>` : ""}
     ${props.updated_at ? `시스템 갱신: ${formatDate(props.updated_at)}<br>` : ""}
     <button class="popup-roadview-button" type="button">카카오 로드뷰</button>
+  `;
+}
+
+function popupContent(props) {
+  const enriched = enrichReviewProperties(props);
+  const names = facilityNameParts(props);
+  const title = escapeHtml(names.primary);
+  const subtitle = names.secondary ? `<span class="name-original">${escapeHtml(names.secondary)}</span><br>` : "";
+  const type = props.change_type ? `<b>${changeTypeLabel(props.change_type)}</b><br>` : "";
+  const review = enriched.review_reason
+    ? `${t("reviewLabel")}: ${escapeHtml(enriched.review_reason)}<br>`
+    : "";
+  const zoneType = zoneTypeInfo(props.facility_type_code);
+  const apiDates =
+    props.api_first_registered_on || props.api_last_modified_on
+      ? `${t("apiFirst")}: ${formatApiDate(props.api_first_registered_on)}<br>
+    ${t("apiLast")}: ${formatApiDate(props.api_last_modified_on)}<br>`
+      : "";
+  return `
+    <strong>${title}</strong><br>
+    ${subtitle}
+    ${type}
+    ${t("type")}: ${zoneType.label}<br>
+    ${t("manageNo")}: ${props.source_manage_no || "-"}<br>
+    ${t("sgg")}: ${props.sgg_code || "-"}<br>
+    ${t("group")}: ${props.zone_group_id || "-"}<br>
+    ${apiDates}
+    ${review}
+    ${popupTimelineContent(props)}
+    ${props.detected_at ? `${t("detected")}: ${formatDate(props.detected_at)}<br>` : ""}
+    ${props.updated_at ? `${t("updated")}: ${formatDate(props.updated_at)}<br>` : ""}
+    <button class="popup-roadview-button" type="button">${t("kakaoRoadview")}</button>
   `;
 }
 
@@ -1041,6 +1491,80 @@ function renderCurrentRegionSelect() {
   }
   select.value = state.selectedSido;
   renderCurrentRegionSummary();
+}
+
+function renderCurrentRegionSummary() {
+  const target = document.getElementById("current-region-summary");
+  if (!target) return;
+  const region = selectedCurrentRegion();
+  if (!region) {
+    target.textContent = t("noRegion");
+    return;
+  }
+  target.textContent = `${formatSidoName(region)} · Polygon ${numberText(region.zone_count)} · Point ${numberText(
+    region.point_count,
+  )} · ${t("sgg")} ${numberText(region.sgg_count)}`;
+}
+
+function renderCurrentRegionSelect() {
+  const select = document.getElementById("current-sido");
+  if (!select || !state.currentIndex) return;
+  const regions = state.currentIndex.regions || [];
+  select.replaceChildren(
+    ...regions.map((region) => {
+      const option = document.createElement("option");
+      option.value = region.sido_code;
+      option.textContent = `${formatSidoName(region)} (${numberText(region.zone_count)} / ${numberText(
+        region.point_count,
+      )})`;
+      return option;
+    }),
+  );
+  if (!currentRegion(state.selectedSido) && regions.length) {
+    state.selectedSido = regions[0].sido_code;
+  }
+  select.value = state.selectedSido;
+  renderCurrentRegionSummary();
+}
+
+function applyStaticLanguage() {
+  document.documentElement.lang = state.language;
+  document.title = t("appTitle");
+  document.querySelectorAll("[data-i18n]").forEach((element) => {
+    element.textContent = t(element.dataset.i18n);
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((element) => {
+    element.setAttribute("placeholder", t(element.dataset.i18nPlaceholder));
+  });
+  document.querySelectorAll("[data-change-label]").forEach((element) => {
+    element.textContent = changeTypeLabel(element.dataset.changeLabel);
+  });
+  document.querySelectorAll("[data-language]").forEach((button) => {
+    const active = button.dataset.language === state.language;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  setPanelCollapsed(document.body.classList.contains("panel-collapsed"));
+  renderCurrentRegionSelect();
+}
+
+function rerenderDynamicLanguage() {
+  renderEvents();
+  renderCurrentItems();
+  renderChangeSummaryBySido();
+  if (window.dashboardOverview) renderOverview(window.dashboardOverview);
+}
+
+function setLanguage(language) {
+  if (!I18N[language] || state.language === language) return;
+  state.language = language;
+  localStorage.setItem("dashboardLanguage", language);
+  applyStaticLanguage();
+  rerenderDynamicLanguage();
+  removeKakaoOverlays(["new", "changed", "review"]);
+  state.kakao.changeOverlaysBuilt = false;
+  buildKakaoOverlays();
+  setKakaoOverlayVisibility();
 }
 
 function clearCurrentLayers() {
@@ -1151,6 +1675,64 @@ function renderOverview(overview) {
   );
 }
 
+function renderOverview(overview) {
+  window.dashboardOverview = overview;
+  document.getElementById("polygon-count").textContent = numberText(
+    overview.current_counts?.polygons,
+  );
+  document.getElementById("point-count").textContent = numberText(
+    overview.current_counts?.facility_points,
+  );
+  document.getElementById("sgg-count").textContent = numberText(
+    overview.current_counts?.sgg_codes,
+  );
+
+  const recentRuns = overview.recent_runs || [];
+  const latest = recentRuns[0];
+  document.getElementById("last-updated").textContent = latest
+    ? `${t("latestRun")} ${formatDate(latest.finished_at || latest.started_at)}`
+    : t("noRuns");
+  document.getElementById("run-total").textContent = countText(recentRuns.length);
+
+  const runList = document.getElementById("run-list");
+  runList.replaceChildren(
+    ...recentRuns.map((run) => {
+      const item = document.createElement("li");
+      item.className = "run-item";
+      const polygonChanges = Object.values(run.polygon_changes || {}).reduce(
+        (sum, value) => sum + Number(value || 0),
+        0,
+      );
+      const pointChanges = Object.values(run.point_changes || {}).reduce(
+        (sum, value) => sum + Number(value || 0),
+        0,
+      );
+      item.innerHTML = `
+        <div class="run-topline">
+          <span class="run-title">${run.status}</span>
+          <span class="badge ${run.status === "SUCCESS" ? "NEW" : "DELETED"}">${formatDate(
+            run.finished_at || run.started_at,
+          )}</span>
+        </div>
+        <div class="run-meta">
+          ${t("collected")} ${countText(run.fetched_count)} · ${t("polygonChanged")} ${numberText(
+            polygonChanges,
+          )} · ${t("pointChangedCount")} ${numberText(pointChanges)}<br>
+          ${
+            run.status !== "SUCCESS" && run.error_message
+              ? `<span class="run-error">${t("failureReason")}: ${escapeHtml(
+                  runFailureReason(run.error_message),
+                )}</span><br>`
+              : ""
+          }
+          ${run.run_id}
+        </div>
+      `;
+      return item;
+    }),
+  );
+}
+
 function renderChangeSummaryBySido() {
   const target = document.getElementById("change-region-summary");
   if (!target || !state.changeSummaryBySido) return;
@@ -1166,6 +1748,28 @@ function renderChangeSummaryBySido() {
       item.textContent = `${region.sido_name} ${numberText(region.total)} · N ${numberText(
         region.new,
       )} · C ${numberText(region.changed)} · R ${numberText(region.deleted_or_review)}`;
+      return item;
+    }),
+  );
+}
+
+function renderChangeSummaryBySido() {
+  const target = document.getElementById("change-region-summary");
+  if (!target || !state.changeSummaryBySido) return;
+  const regions = state.changeSummaryBySido.regions || [];
+  if (!regions.length) {
+    target.textContent = t("noChangesAfterBaseline");
+    return;
+  }
+  target.replaceChildren(
+    ...regions.map((region) => {
+      const item = document.createElement("span");
+      item.className = "region-chip";
+      item.textContent = `${formatSidoName(region)} ${countText(region.total)} · ${t("new")} ${numberText(
+        region.new,
+      )} · ${t("changed")} ${numberText(region.changed)} · ${t("review")} ${numberText(
+        region.deleted_or_review,
+      )}`;
       return item;
     }),
   );
@@ -1284,6 +1888,141 @@ function renderCurrentItems() {
           ${
             item.api_last_modified_on
               ? `<br><span>API 최종수정 ${formatApiDate(item.api_last_modified_on)}</span>`
+              : ""
+          }
+        </div>
+      `;
+      listItem.addEventListener("click", () => {
+        document.querySelectorAll(".current-item.selected").forEach((selectedItem) => {
+          selectedItem.classList.remove("selected");
+        });
+        listItem.classList.add("selected");
+        void focusCurrentSearchItem(item);
+      });
+      listItem.addEventListener("keydown", (keyboardEvent) => {
+        if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") {
+          keyboardEvent.preventDefault();
+          void focusCurrentSearchItem(item);
+        }
+      });
+      return listItem;
+    }),
+  );
+}
+
+function searchableText(item) {
+  return [
+    item.facility_name,
+    facilityNameEn(item.facility_name),
+    item.source_manage_no,
+    item.sgg_code,
+    item.zone_group_id,
+    item.sido_name,
+    formatSidoName(item.sido_code),
+    item.run_id,
+    item.layer_type,
+    item.facility_type_code,
+    zoneTypeInfo(item.facility_type_code).label,
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+function renderEvents() {
+  const query = document.getElementById("event-search").value.trim().toLowerCase();
+  const type = document.getElementById("event-type").value;
+  const filtered = state.events.filter((event) => {
+    const matchesType = !type || event.change_type === type;
+    return matchesType && (!query || searchableText(event).includes(query));
+  });
+
+  document.getElementById("event-total").textContent = countText(filtered.length);
+  const eventList = document.getElementById("event-list");
+  eventList.replaceChildren(
+    ...filtered.slice(0, 120).map((event) => {
+      const enriched = enrichReviewProperties(event);
+      const timelineText = timelineSummary(timelineForProps(event));
+      const zoneType = zoneTypeInfo(event.facility_type_code);
+      const names = facilityNameParts(event);
+      const item = document.createElement("li");
+      item.className = "event-item";
+      item.tabIndex = 0;
+      item.setAttribute("role", "button");
+      item.setAttribute("aria-label", `${names.primary} ${t("moveToLocation")}`);
+      item.innerHTML = `
+        <div class="event-topline">
+          <span class="event-title">${escapeHtml(names.primary)}</span>
+          <span class="badge ${event.change_type}">${changeTypeLabel(event.change_type)}</span>
+        </div>
+        <div class="event-meta">
+          ${names.secondary ? `<span class="name-original">${escapeHtml(names.secondary)}</span><br>` : ""}
+          <span class="zone-type" style="--zone-type-color: ${zoneType.color}">${zoneType.label}</span><br>
+          ${event.layer_type} · ${event.source_manage_no || "-"} · ${event.sgg_code || "-"}<br>
+          ${
+            enriched.review_reason
+              ? `<span class="review-reason">${escapeHtml(enriched.review_reason)}</span><br>`
+              : ""
+          }
+          ${
+            event.api_last_modified_on
+              ? `<span>${t("apiLast")} ${formatApiDate(event.api_last_modified_on)}</span><br>`
+              : ""
+          }
+          ${timelineText ? `<span class="timeline-summary">${timelineText}</span><br>` : ""}
+          ${formatDate(event.detected_at)}
+        </div>
+      `;
+      item.addEventListener("click", () => {
+        document.querySelectorAll(".event-item.selected").forEach((selectedItem) => {
+          selectedItem.classList.remove("selected");
+        });
+        item.classList.add("selected");
+        focusEvent(event);
+      });
+      item.addEventListener("keydown", (keyboardEvent) => {
+        if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") {
+          keyboardEvent.preventDefault();
+          focusEvent(event);
+        }
+      });
+      return item;
+    }),
+  );
+}
+
+function renderCurrentItems() {
+  const query = document.getElementById("current-search").value.trim().toLowerCase();
+  const filterValue = document.getElementById("current-zone-type").value;
+  const sourceItems = query ? state.currentSearchItems : state.currentItems;
+  const filtered = sourceItems.filter(
+    (item) => matchesZoneFilter(item, filterValue) && (!query || searchableText(item).includes(query)),
+  );
+
+  document.getElementById("current-total").textContent = countText(filtered.length);
+  const currentList = document.getElementById("current-list");
+  currentList.replaceChildren(
+    ...filtered.slice(0, 200).map((item) => {
+      const zoneType = zoneTypeInfo(item.facility_type_code);
+      const names = facilityNameParts(item);
+      const listItem = document.createElement("li");
+      listItem.className = "current-item";
+      listItem.tabIndex = 0;
+      listItem.setAttribute("role", "button");
+      listItem.setAttribute("aria-label", `${names.primary} ${t("moveToLocation")}`);
+      listItem.innerHTML = `
+        <div class="event-topline">
+          <span class="event-title">${escapeHtml(names.primary)}</span>
+          <span class="badge current-badge">${item.layer_type}</span>
+        </div>
+        <div class="event-meta">
+          ${names.secondary ? `<span class="name-original">${escapeHtml(names.secondary)}</span><br>` : ""}
+          <span class="zone-type" style="--zone-type-color: ${zoneType.color}">${zoneType.label}</span><br>
+          ${item.layer_type} · ${item.source_manage_no || "-"} · ${item.sgg_code || "-"}<br>
+          ${query && item.sido_name ? `${formatSidoName(item.sido_code || item.sido_name)}<br>` : ""}
+          ${t("group")} ${item.zone_group_id || "-"}
+          ${
+            item.api_last_modified_on
+              ? `<br><span>${t("apiLast")} ${formatApiDate(item.api_last_modified_on)}</span>`
               : ""
           }
         </div>
@@ -1533,12 +2272,20 @@ function bindRoadviewResize() {
   handle.addEventListener("pointercancel", stopResize);
 }
 
+function bindLanguageToggle() {
+  document.querySelectorAll("[data-language]").forEach((button) => {
+    button.addEventListener("click", () => setLanguage(button.dataset.language));
+  });
+}
+
 async function main() {
+  applyStaticLanguage();
   bindLayerToggles();
   bindActivityTabs();
   bindMapTools();
   bindRoadviewDrag();
   bindRoadviewResize();
+  bindLanguageToggle();
   document.getElementById("event-search").addEventListener("input", renderEvents);
   document.getElementById("event-type").addEventListener("change", renderEvents);
   document.getElementById("current-search").addEventListener("input", () => {

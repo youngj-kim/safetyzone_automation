@@ -123,9 +123,9 @@ node --check dashboard\app.js
 
 현재 기대 버전:
 
-- `styles.css?v=20260726-1`
-- `config.js?v=20260726-1`
-- `app.js?v=20260726-1`
+- `styles.css?v=20260726-2`
+- `config.js?v=20260726-2`
+- `app.js?v=20260726-2`
 
 Kakao layer update:
 
@@ -181,6 +181,13 @@ Nationwide dashboard split update:
 - `dashboard/data/current_search/{sido}.json` supports nationwide current-object search and is loaded only when the user searches.
 - Recent change events remain nationwide through `change_events.json`, `change_zones.geojson`, and `change_points.geojson`.
 - `dashboard/data/change_summary_by_sido.json` provides per-sido counts for nationwide recent changes.
+
+Language view update:
+
+- Dashboard supports a `KR / EN` view toggle.
+- Static UI labels, filters, legends, tabs, run summaries, change labels, list items, and popups switch language on the client.
+- Facility names in EN mode use rule-based romanization plus English facility suffixes, with the Korean original shown as secondary text.
+- Facility name translation is not official; it is intended for portfolio/public reading and can be refined later with a manual correction table.
 
 Kakao 설정 확인:
 
