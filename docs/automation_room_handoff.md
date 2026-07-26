@@ -101,7 +101,7 @@ docs/automation_room_handoff.md 확인해서 지금까지 개발진행한거 커
 node --check dashboard\app.js
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m pytest
-.\.venv\Scripts\python.exe -m safety_zone_monitor export-dashboard --output dashboard\data --event-limit 500 --baseline-date 2026-07-07
+.\.venv\Scripts\python.exe -m safety_zone_monitor export-dashboard --output dashboard\data --event-limit 500 --baseline-date 2026-07-25
 ```
 
 검증 결과:
@@ -184,14 +184,14 @@ Kakao 설정 확인:
 - 전국 청크 수집용 `config/sgg_chunks/nationwide_chunk_01.txt`부터 `nationwide_chunk_06.txt`까지 생성되어 있습니다.
 - GitHub Actions repository variable은 `SGG_CODES_FILE=config/sgg_codes_nationwide.txt`로 설정되어 있습니다.
 - GitHub Actions 수동 실행 시 `sgg_codes_file` 입력값으로 청크 파일 경로를 지정하면 해당 범위만 실행합니다.
-- 전국 기준선 DB 등록은 아직 완료되지 않았습니다.
-- 공공 API 429 rate limit 때문에 재시도가 필요합니다.
-- 전국 통판 등록 시에는 2026-07-07 기준 API에 이미 존재했던 시설을 `신규`로 취급하지 않는 정책을 유지합니다.
+- 전국 기준선 DB 등록은 2026-07-25 실행에서 성공했습니다.
+- 2026-07-26 실행도 전국 249개 시군구 기준으로 성공했으며 변경 건수는 0건입니다.
+- 대시보드 export는 `--baseline-date 2026-07-25`를 사용합니다. 전국 기준선 등록일의 대량 `NEW` 이벤트는 최근 변경 목록에서 제외하고 현재 객체로만 표시합니다.
 
 ## 남은 작업
 
-- API 제한이 풀린 뒤 전국 기준선 수집을 재시도합니다.
-- 전국 기준선 등록 후 dashboard data를 다시 export하고 배포합니다.
+- `dashboard/data` 갱신분을 커밋하고 GitHub Pages에 배포합니다.
+- 이후 일일 수집 성공 여부와 변경 건수는 대시보드 `모니터링 이력`에서 확인합니다.
 - Kakao 지도/Roadview 배포 후 실제 도메인에서 SDK 로드와 로드뷰 조회를 확인합니다.
 
 ## 1번방 작업 순서
