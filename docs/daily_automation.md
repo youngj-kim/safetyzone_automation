@@ -70,8 +70,10 @@ GitHub Actions의 `Daily safety-zone monitor`에서 `Run workflow`를 누른 뒤
 않는다.
 
 전국 청크 실행이 모두 끝난 뒤 대시보드에 반영하려면 운영 DB에서 dashboard data를 다시
-export하고, 변경된 `dashboard/data/*.json`, `dashboard/data/*.geojson`을 커밋한 뒤
-GitHub Pages 배포를 진행한다.
+export하고, 변경된 `dashboard/data/*.json`, `dashboard/data/current_zones/*.geojson`,
+`dashboard/data/current_points/*.geojson`, 변경 GeoJSON을 커밋한 뒤 GitHub Pages 배포를 진행한다.
+현재 객체는 전국 단일 GeoJSON으로 배포하지 않고 시도 단위로 로드한다. 최근 변경 이벤트는
+전국 단위 파일을 유지하고, 시도별 변경 건수는 별도 요약 JSON으로 표시한다.
 
 ## API 오류 유형
 

@@ -31,6 +31,11 @@ const state = {
   currentItems: [],
   currentLayers: new Map(),
   currentFeatures: new Map(),
+  currentIndex: null,
+  currentSearchItems: [],
+  currentSearchIndexLoading: null,
+  selectedSido: "11",
+  currentRegionLoading: null,
   selectedLocation: null,
   lastOsmView: {
     ...INITIAL_VIEW,
@@ -47,12 +52,14 @@ const state = {
     roadview: null,
     roadviewClient: null,
     roadviewLayerVisible: false,
+    changeOverlaysBuilt: false,
   },
   timelines: new Map(),
   polygonDeletedManageNos: new Set(),
   currentGroups: new Map(),
+  changeSummaryBySido: null,
 };
-document.body.dataset.dashboardVersion = "20260724-14";
+document.body.dataset.dashboardVersion = "20260726-1";
 
 const dashboardConfig = window.SAFETYZONE_CONFIG || {};
 const queryParams = new URLSearchParams(window.location.search);
@@ -154,7 +161,10 @@ function matchesZoneFilter(item, filterValue) {
 }
 
 function currentItemKey(props) {
-  return `${props.layer_type}:${props.facility_id || props.source_manage_no || props.zone_group_id}`;
+  if (props.layer_type === "Point" && props.facility_id) {
+    return `Point:${props.facility_id}-${props.point_ordinal ?? 0}`;
+  }
+  return `${props.layer_type}:${props.source_manage_no || props.zone_group_id || props.facility_id}`;
 }
 
 function buildCurrentItems(zones, points) {
@@ -497,6 +507,15 @@ function registerKakaoOverlay(category, overlay) {
   state.kakao.overlays.get(category).push(overlay);
 }
 
+function removeKakaoOverlays(categories) {
+  if (!state.kakao.enabled) return;
+  categories.forEach((category) => {
+    const overlays = state.kakao.overlays.get(category) || [];
+    overlays.forEach((overlay) => overlay.setMap(null));
+    state.kakao.overlays.delete(category);
+  });
+}
+
 function addKakaoFeature(feature, rawProps = {}) {
   const props = enrichReviewProperties(rawProps);
   const category = kakaoCategoryForProps(props);
@@ -534,10 +553,22 @@ function addKakaoFeature(feature, rawProps = {}) {
   });
 }
 
-function buildKakaoOverlays() {
-  if (!state.kakao.enabled || state.kakao.overlays.size) return;
-  state.currentFeatures.forEach((feature) => addKakaoFeature(feature, feature.properties || {}));
+function buildKakaoChangeOverlays() {
+  if (!state.kakao.enabled || state.kakao.changeOverlaysBuilt) return;
   state.eventFeatures.forEach((feature) => addKakaoFeature(feature, feature.properties || {}));
+  state.kakao.changeOverlaysBuilt = true;
+}
+
+function buildKakaoCurrentOverlays() {
+  if (!state.kakao.enabled) return;
+  removeKakaoOverlays(["currentChild", "currentSenior", "currentDisabled", "currentOther"]);
+  state.currentFeatures.forEach((feature) => addKakaoFeature(feature, feature.properties || {}));
+}
+
+function buildKakaoOverlays() {
+  if (!state.kakao.enabled) return;
+  buildKakaoChangeOverlays();
+  buildKakaoCurrentOverlays();
   setKakaoOverlayVisibility();
 }
 
@@ -874,7 +905,7 @@ function focusCurrentItem(item) {
   const category = currentLayerKey(item.facility_type_code);
   ensureLayerVisible(category);
 
-  const key = currentItemKey(item);
+  const key = item.id || currentItemKey(item);
   const layer = state.currentLayers.get(key);
   const feature = state.currentFeatures.get(key);
   const bounds =
@@ -910,6 +941,13 @@ function focusCurrentItem(item) {
   document.body.dataset.lastPopup = key;
 }
 
+async function focusCurrentSearchItem(item) {
+  if (item.sido_code && item.sido_code !== state.selectedSido) {
+    await loadCurrentRegion(item.sido_code);
+  }
+  focusCurrentItem(item);
+}
+
 function popupContent(props) {
   const enriched = enrichReviewProperties(props);
   const title = props.facility_name || "이름 없음";
@@ -941,6 +979,116 @@ async function loadJson(path) {
   const response = await fetch(path);
   if (!response.ok) throw new Error(`${path} ${response.status}`);
   return response.json();
+}
+
+async function ensureCurrentSearchIndex() {
+  if (state.currentSearchItems.length) return;
+  if (!state.currentSearchIndexLoading) {
+    state.currentSearchIndexLoading = loadJson("data/current_search_index.json").then((payload) => {
+      state.currentSearchItems = payload.items || [];
+      return state.currentSearchItems;
+    });
+  }
+  await state.currentSearchIndexLoading;
+}
+
+async function handleCurrentSearchInput() {
+  const query = document.getElementById("current-search").value.trim();
+  if (query) await ensureCurrentSearchIndex();
+  renderCurrentItems();
+}
+
+function currentRegion(code) {
+  return (state.currentIndex?.regions || []).find((region) => region.sido_code === code);
+}
+
+function selectedCurrentRegion() {
+  return currentRegion(state.selectedSido);
+}
+
+function renderCurrentRegionSummary() {
+  const target = document.getElementById("current-region-summary");
+  if (!target) return;
+  const region = selectedCurrentRegion();
+  if (!region) {
+    target.textContent = "No region selected.";
+    return;
+  }
+  target.textContent = `${region.sido_name} · Polygon ${numberText(region.zone_count)} · Point ${numberText(
+    region.point_count,
+  )} · SGG ${numberText(region.sgg_count)}`;
+}
+
+function renderCurrentRegionSelect() {
+  const select = document.getElementById("current-sido");
+  if (!select || !state.currentIndex) return;
+  const regions = state.currentIndex.regions || [];
+  select.replaceChildren(
+    ...regions.map((region) => {
+      const option = document.createElement("option");
+      option.value = region.sido_code;
+      option.textContent = `${region.sido_name} (${numberText(region.zone_count)} / ${numberText(
+        region.point_count,
+      )})`;
+      return option;
+    }),
+  );
+  if (!currentRegion(state.selectedSido) && regions.length) {
+    state.selectedSido = regions[0].sido_code;
+  }
+  select.value = state.selectedSido;
+  renderCurrentRegionSummary();
+}
+
+function clearCurrentLayers() {
+  ["currentChild", "currentSenior", "currentDisabled", "currentOther"].forEach((key) => {
+    layerGroups[key].clearLayers();
+  });
+  state.currentItems = [];
+  state.currentLayers.clear();
+  state.currentFeatures.clear();
+  state.currentGroups = new Map();
+  removeKakaoOverlays(["currentChild", "currentSenior", "currentDisabled", "currentOther"]);
+}
+
+function regionBoundsFromCurrentFeatures() {
+  const bounds = L.latLngBounds([]);
+  state.currentFeatures.forEach((feature) => {
+    const featureBounds = boundsFromFeature(feature);
+    if (featureBounds?.isValid()) bounds.extend(featureBounds);
+  });
+  return bounds.isValid() ? bounds : null;
+}
+
+async function loadCurrentRegion(sidoCode, { fit = false } = {}) {
+  const region = currentRegion(sidoCode);
+  if (!region) return;
+  state.selectedSido = sidoCode;
+  renderCurrentRegionSummary();
+  const select = document.getElementById("current-sido");
+  if (select) select.value = sidoCode;
+
+  const loadingKey = `${sidoCode}:${Date.now()}`;
+  state.currentRegionLoading = loadingKey;
+  const [zones, points] = await Promise.all([
+    loadJson(`data/${region.zones_file}`),
+    loadJson(`data/${region.points_file}`),
+  ]);
+  if (state.currentRegionLoading !== loadingKey) return;
+
+  clearCurrentLayers();
+  state.currentItems = buildCurrentItems(zones, points);
+  state.currentGroups = buildCurrentGroupIndex(zones, points);
+  addCurrentZones(zones);
+  addCurrentPoints(points);
+  buildKakaoCurrentOverlays();
+  setKakaoOverlayVisibility();
+  renderCurrentItems();
+
+  if (fit) {
+    const bounds = regionBoundsFromCurrentFeatures();
+    if (bounds) map.fitBounds(bounds.pad(0.25), { maxZoom: 14, animate: true });
+  }
 }
 
 function renderOverview(overview) {
@@ -995,6 +1143,26 @@ function renderOverview(overview) {
           ${run.run_id}
         </div>
       `;
+      return item;
+    }),
+  );
+}
+
+function renderChangeSummaryBySido() {
+  const target = document.getElementById("change-region-summary");
+  if (!target || !state.changeSummaryBySido) return;
+  const regions = state.changeSummaryBySido.regions || [];
+  if (!regions.length) {
+    target.textContent = "No nationwide change events after baseline.";
+    return;
+  }
+  target.replaceChildren(
+    ...regions.map((region) => {
+      const item = document.createElement("span");
+      item.className = "region-chip";
+      item.textContent = `${region.sido_name} ${numberText(region.total)} · N ${numberText(
+        region.new,
+      )} · C ${numberText(region.changed)} · R ${numberText(region.deleted_or_review)}`;
       return item;
     }),
   );
@@ -1074,12 +1242,14 @@ function renderEvents() {
 function renderCurrentItems() {
   const query = document.getElementById("current-search").value.trim().toLowerCase();
   const filterValue = document.getElementById("current-zone-type").value;
-  const filtered = state.currentItems.filter((item) => {
+  const sourceItems = query ? state.currentSearchItems : state.currentItems;
+  const filtered = sourceItems.filter((item) => {
     const haystack = [
       item.facility_name,
       item.source_manage_no,
       item.sgg_code,
       item.zone_group_id,
+      item.sido_name,
       item.layer_type,
       item.facility_type_code,
       zoneTypeInfo(item.facility_type_code).label,
@@ -1120,12 +1290,12 @@ function renderCurrentItems() {
           selectedItem.classList.remove("selected");
         });
         listItem.classList.add("selected");
-        focusCurrentItem(item);
+        void focusCurrentSearchItem(item);
       });
       listItem.addEventListener("keydown", (keyboardEvent) => {
         if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") {
           keyboardEvent.preventDefault();
-          focusCurrentItem(item);
+          void focusCurrentSearchItem(item);
         }
       });
       return listItem;
@@ -1368,14 +1538,27 @@ async function main() {
   bindRoadviewResize();
   document.getElementById("event-search").addEventListener("input", renderEvents);
   document.getElementById("event-type").addEventListener("change", renderEvents);
-  document.getElementById("current-search").addEventListener("input", renderCurrentItems);
+  document.getElementById("current-search").addEventListener("input", () => {
+    void handleCurrentSearchInput();
+  });
   document.getElementById("current-zone-type").addEventListener("change", renderCurrentItems);
+  document.getElementById("current-sido").addEventListener("change", (event) => {
+    void loadCurrentRegion(event.target.value, { fit: true });
+  });
 
-  const [overview, events, zones, points, changeZones, changePoints, timelines] = await Promise.all([
+  const [
+    overview,
+    events,
+    currentIndex,
+    changeSummaryBySido,
+    changeZones,
+    changePoints,
+    timelines,
+  ] = await Promise.all([
     loadJson("data/overview.json"),
     loadJson("data/change_events.json"),
-    loadJson("data/current_zones.geojson"),
-    loadJson("data/current_points.geojson"),
+    loadJson("data/current_index.json"),
+    loadJson("data/change_summary_by_sido.json"),
     loadJson("data/change_zones.geojson"),
     loadJson("data/change_points.geojson"),
     loadJson("data/timelines.json"),
@@ -1383,7 +1566,10 @@ async function main() {
 
   renderOverview(overview);
   state.events = events.events || [];
-  state.currentItems = buildCurrentItems(zones, points);
+  state.currentIndex = currentIndex;
+  state.changeSummaryBySido = changeSummaryBySido;
+  renderCurrentRegionSelect();
+  renderChangeSummaryBySido();
   state.timelines = new Map(
     (timelines.timelines || []).map((timeline) => [timeline.entity_key, timeline]),
   );
@@ -1399,14 +1585,11 @@ async function main() {
       .map((feature) => feature.properties?.source_manage_no)
       .filter(Boolean),
   );
-  state.currentGroups = buildCurrentGroupIndex(zones, points);
-  addCurrentZones(zones);
-  addCurrentPoints(points);
   addChangeLayer(changeZones);
   addChangeLayer(changePoints);
-  buildKakaoOverlays();
+  buildKakaoChangeOverlays();
+  await loadCurrentRegion(state.selectedSido);
   renderEvents();
-  renderCurrentItems();
 
   requestAnimationFrame(() => map.invalidateSize());
 }

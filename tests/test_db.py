@@ -1,4 +1,11 @@
-from safety_zone_monitor.db import classify_sgg_coverage, sanitize_error_message
+from safety_zone_monitor.db import (
+    change_summary_by_sido,
+    classify_sgg_coverage,
+    current_region_index,
+    current_search_index,
+    group_feature_collection_by_sido,
+    sanitize_error_message,
+)
 
 
 def test_sanitize_error_message_redacts_sensitive_query_params() -> None:
@@ -39,3 +46,71 @@ def test_classify_sgg_coverage_keeps_missing_raw_codes_critical() -> None:
 
     assert coverage["critical"] == ("28125",)
     assert coverage["without_raw_rows"] == ()
+
+
+def test_current_dashboard_split_indexes_by_sido() -> None:
+    zones = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {
+                    "sgg_code": "11110",
+                    "source_manage_no": "Z-1",
+                    "zone_group_id": "G-1",
+                    "facility_name": "A",
+                    "facility_type_code": "1",
+                },
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[[126.0, 37.0], [127.0, 37.0], [127.0, 38.0], [126.0, 37.0]]]],
+                },
+            }
+        ],
+    }
+    points = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {
+                    "sgg_code": "41110",
+                    "facility_id": "P-1",
+                    "point_ordinal": 2,
+                    "source_manage_no": "P-Z-1",
+                    "zone_group_id": "G-2",
+                    "facility_name": "B",
+                    "facility_type_code": "2",
+                },
+                "geometry": {"type": "Point", "coordinates": [127.1, 37.2]},
+            }
+        ],
+    }
+
+    zones_by_sido = group_feature_collection_by_sido(zones)
+    points_by_sido = group_feature_collection_by_sido(points)
+    region_index = current_region_index(zones_by_sido, points_by_sido)
+    search_index = current_search_index(zones_by_sido, points_by_sido)
+
+    assert sorted(zones_by_sido) == ["11"]
+    assert sorted(points_by_sido) == ["41"]
+    assert region_index["totals"] == {"zones": 1, "points": 1, "sgg_codes": 2}
+    assert {item["id"] for item in search_index["items"]} == {"Polygon:Z-1", "Point:P-1-2"}
+
+
+def test_change_summary_by_sido_groups_change_categories() -> None:
+    summary = change_summary_by_sido(
+        {
+            "events": [
+                {"sgg_code": "11110", "change_type": "NEW"},
+                {"sgg_code": "11140", "change_type": "ATTRIBUTE_CHANGED"},
+                {"sgg_code": "41110", "change_type": "MISSING"},
+            ]
+        }
+    )
+
+    assert summary["totals"] == {"total": 3, "new": 1, "changed": 1, "deleted_or_review": 1}
+    assert [(region["sido_code"], region["total"]) for region in summary["regions"]] == [
+        ("11", 2),
+        ("41", 1),
+    ]

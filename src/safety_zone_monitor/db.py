@@ -23,6 +23,26 @@ from safety_zone_monitor.diff import (
 from safety_zone_monitor.normalize import FacilityPointRecord, ZoneRecord, clean_text, stable_hash
 
 DEFAULT_DASHBOARD_BASELINE_DATE = "2026-07-07"
+SIDO_NAMES = {
+    "11": "서울특별시",
+    "12": "전라남도",
+    "26": "부산광역시",
+    "27": "대구광역시",
+    "28": "인천광역시",
+    "29": "광주광역시",
+    "30": "대전광역시",
+    "31": "울산광역시",
+    "36": "세종특별자치시",
+    "41": "경기도",
+    "43": "충청북도",
+    "44": "충청남도",
+    "46": "전라남도",
+    "47": "경상북도",
+    "48": "경상남도",
+    "50": "제주특별자치도",
+    "51": "강원특별자치도",
+    "52": "전북특별자치도",
+}
 SENSITIVE_QUERY_PARAM_PATTERN = re.compile(
     r"([?&](?:serviceKey|service_key|key|token)=)[^&\s]+",
     re.IGNORECASE,
@@ -46,6 +66,176 @@ def classify_sgg_coverage(
     return {
         "critical": tuple(code for code in missing if code in raw_code_set),
         "without_raw_rows": tuple(code for code in missing if code not in raw_code_set),
+    }
+
+
+def sido_code_from_sgg(sgg_code: str | None) -> str:
+    code = str(sgg_code or "").strip()
+    return code[:2] if len(code) >= 2 else "unknown"
+
+
+def sido_name(sido_code: str) -> str:
+    return SIDO_NAMES.get(sido_code, f"{sido_code}권역")
+
+
+def empty_feature_collection() -> dict[str, Any]:
+    return {"type": "FeatureCollection", "features": []}
+
+
+def group_feature_collection_by_sido(
+    geojson: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    grouped: dict[str, dict[str, Any]] = {}
+    for feature in geojson.get("features", []):
+        sido_code = sido_code_from_sgg(feature.get("properties", {}).get("sgg_code"))
+        grouped.setdefault(sido_code, empty_feature_collection())["features"].append(feature)
+    return grouped
+
+
+def _collect_coordinate_pairs(value: Any, pairs: list[tuple[float, float]]) -> None:
+    if not isinstance(value, list):
+        return
+    if len(value) >= 2 and isinstance(value[0], int | float) and isinstance(value[1], int | float):
+        pairs.append((float(value[0]), float(value[1])))
+        return
+    for item in value:
+        _collect_coordinate_pairs(item, pairs)
+
+
+def feature_center(feature: dict[str, Any]) -> dict[str, float] | None:
+    geometry = feature.get("geometry") or {}
+    coordinates = geometry.get("coordinates")
+    if geometry.get("type") == "Point" and isinstance(coordinates, list) and len(coordinates) >= 2:
+        return {"lng": float(coordinates[0]), "lat": float(coordinates[1])}
+
+    pairs: list[tuple[float, float]] = []
+    _collect_coordinate_pairs(coordinates, pairs)
+    if not pairs:
+        return None
+    lng_values = [pair[0] for pair in pairs]
+    lat_values = [pair[1] for pair in pairs]
+    return {
+        "lng": (min(lng_values) + max(lng_values)) / 2,
+        "lat": (min(lat_values) + max(lat_values)) / 2,
+    }
+
+
+def current_search_index(
+    zones_by_sido: dict[str, dict[str, Any]],
+    points_by_sido: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    items: list[dict[str, Any]] = []
+    for layer_type, grouped in (("Polygon", zones_by_sido), ("Point", points_by_sido)):
+        for sido_code, geojson in grouped.items():
+            for feature in geojson.get("features", []):
+                props = feature.get("properties", {})
+                center = feature_center(feature)
+                if layer_type == "Point" and props.get("facility_id"):
+                    item_id = f"Point:{props.get('facility_id')}-{props.get('point_ordinal') or 0}"
+                else:
+                    source_id = (
+                        props.get("source_manage_no")
+                        or props.get("zone_group_id")
+                        or props.get("facility_id")
+                    )
+                    item_id = (
+                        f"{layer_type}:"
+                        f"{source_id}"
+                    )
+                item = {
+                    "id": item_id,
+                    "layer_type": layer_type,
+                    "sido_code": sido_code,
+                    "sido_name": sido_name(sido_code),
+                    "sgg_code": props.get("sgg_code"),
+                    "facility_name": props.get("facility_name"),
+                    "facility_id": props.get("facility_id"),
+                    "point_ordinal": props.get("point_ordinal"),
+                    "source_manage_no": props.get("source_manage_no"),
+                    "zone_group_id": props.get("zone_group_id"),
+                    "facility_type_code": props.get("facility_type_code"),
+                }
+                if center:
+                    item["center"] = center
+                items.append(item)
+    items.sort(
+        key=lambda item: (
+            str(item.get("sido_code") or ""),
+            str(item.get("facility_name") or ""),
+            str(item.get("source_manage_no") or ""),
+            str(item.get("layer_type") or ""),
+        )
+    )
+    return {"items": items}
+
+
+def current_region_index(
+    zones_by_sido: dict[str, dict[str, Any]],
+    points_by_sido: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    regions = []
+    for code in sorted(set(zones_by_sido) | set(points_by_sido)):
+        zones = zones_by_sido.get(code, empty_feature_collection())
+        points = points_by_sido.get(code, empty_feature_collection())
+        sgg_codes = {
+            feature.get("properties", {}).get("sgg_code")
+            for feature in [*zones.get("features", []), *points.get("features", [])]
+            if feature.get("properties", {}).get("sgg_code")
+        }
+        regions.append(
+            {
+                "sido_code": code,
+                "sido_name": sido_name(code),
+                "zone_count": len(zones.get("features", [])),
+                "point_count": len(points.get("features", [])),
+                "sgg_count": len(sgg_codes),
+                "zones_file": f"current_zones/{code}.geojson",
+                "points_file": f"current_points/{code}.geojson",
+            }
+        )
+    return {
+        "generated_at": None,
+        "regions": regions,
+        "totals": {
+            "zones": sum(region["zone_count"] for region in regions),
+            "points": sum(region["point_count"] for region in regions),
+            "sgg_codes": sum(region["sgg_count"] for region in regions),
+        },
+    }
+
+
+def change_summary_by_sido(change_events: dict[str, Any]) -> dict[str, Any]:
+    summary: dict[str, dict[str, Any]] = {}
+    for event in change_events.get("events", []):
+        code = sido_code_from_sgg(event.get("sgg_code"))
+        entry = summary.setdefault(
+            code,
+            {
+                "sido_code": code,
+                "sido_name": sido_name(code),
+                "total": 0,
+                "new": 0,
+                "changed": 0,
+                "deleted_or_review": 0,
+            },
+        )
+        entry["total"] += 1
+        change_type = event.get("change_type")
+        if change_type == "NEW":
+            entry["new"] += 1
+        elif change_type in {"DELETED", "MISSING"}:
+            entry["deleted_or_review"] += 1
+        else:
+            entry["changed"] += 1
+    regions = sorted(summary.values(), key=lambda item: item["sido_code"])
+    return {
+        "regions": regions,
+        "totals": {
+            "total": sum(item["total"] for item in regions),
+            "new": sum(item["new"] for item in regions),
+            "changed": sum(item["changed"] for item in regions),
+            "deleted_or_review": sum(item["deleted_or_review"] for item in regions),
+        },
     }
 
 
@@ -1610,14 +1800,20 @@ class Repository:
     ) -> None:
         target = Path(output_dir)
         target.mkdir(parents=True, exist_ok=True)
+        current_zones = self.dashboard_current_zones_geojson()
+        current_points = self.dashboard_current_points_geojson()
+        zones_by_sido = group_feature_collection_by_sido(current_zones)
+        points_by_sido = group_feature_collection_by_sido(current_points)
+        change_events = self.dashboard_change_events(
+            limit=event_limit,
+            baseline_date=baseline_date,
+        )
         datasets = {
             "overview.json": self.dashboard_overview(),
-            "change_events.json": self.dashboard_change_events(
-                limit=event_limit,
-                baseline_date=baseline_date,
-            ),
-            "current_zones.geojson": self.dashboard_current_zones_geojson(),
-            "current_points.geojson": self.dashboard_current_points_geojson(),
+            "change_events.json": change_events,
+            "current_index.json": current_region_index(zones_by_sido, points_by_sido),
+            "current_search_index.json": current_search_index(zones_by_sido, points_by_sido),
+            "change_summary_by_sido.json": change_summary_by_sido(change_events),
             "change_zones.geojson": self.dashboard_change_zones_geojson(
                 limit=event_limit,
                 baseline_date=baseline_date,
@@ -1633,9 +1829,26 @@ class Repository:
         }
         for filename, payload in datasets.items():
             (target / filename).write_text(
-                json.dumps(payload, ensure_ascii=False, indent=2),
+                json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
                 encoding="utf-8",
             )
+        for obsolete_filename in ("current_zones.geojson", "current_points.geojson"):
+            obsolete_path = target / obsolete_filename
+            if obsolete_path.exists():
+                obsolete_path.unlink()
+        for folder_name, grouped in (
+            ("current_zones", zones_by_sido),
+            ("current_points", points_by_sido),
+        ):
+            folder = target / folder_name
+            folder.mkdir(parents=True, exist_ok=True)
+            for old_file in folder.glob("*.geojson"):
+                old_file.unlink()
+            for code, payload in grouped.items():
+                (folder / f"{code}.geojson").write_text(
+                    json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+                    encoding="utf-8",
+                )
 
     def build_link_match_candidates(
         self,

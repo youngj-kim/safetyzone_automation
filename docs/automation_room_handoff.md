@@ -123,9 +123,9 @@ node --check dashboard\app.js
 
 현재 기대 버전:
 
-- `styles.css?v=20260724-14`
-- `config.js?v=20260724-14`
-- `app.js?v=20260724-14`
+- `styles.css?v=20260726-1`
+- `config.js?v=20260726-1`
+- `app.js?v=20260726-1`
 
 Kakao layer update:
 
@@ -172,6 +172,15 @@ Initial map view update:
 
 - OSM and Kakao initial map view now start at Seoul Station (`37.5547, 126.9707`) with zoom 13.
 - The startup `fitBounds()` over all layers was removed so the first screen is not recentered away from Seoul.
+
+Nationwide dashboard split update:
+
+- Current Polygon/Point data is no longer exported as single root GeoJSON files.
+- Current objects are exported by sido under `dashboard/data/current_zones/{sido}.geojson` and `dashboard/data/current_points/{sido}.geojson`.
+- `dashboard/data/current_index.json` drives the sido selector and per-region current counts.
+- `dashboard/data/current_search_index.json` supports nationwide current-object search and is loaded only when the user searches.
+- Recent change events remain nationwide through `change_events.json`, `change_zones.geojson`, and `change_points.geojson`.
+- `dashboard/data/change_summary_by_sido.json` provides per-sido counts for nationwide recent changes.
 
 Kakao 설정 확인:
 
