@@ -178,7 +178,7 @@ Nationwide dashboard split update:
 - Current Polygon/Point data is no longer exported as single root GeoJSON files.
 - Current objects are exported by sido under `dashboard/data/current_zones/{sido}.geojson` and `dashboard/data/current_points/{sido}.geojson`.
 - `dashboard/data/current_index.json` drives the sido selector and per-region current counts.
-- `dashboard/data/current_search_index.json` supports nationwide current-object search and is loaded only when the user searches.
+- `dashboard/data/current_search/{sido}.json` supports nationwide current-object search and is loaded only when the user searches.
 - Recent change events remain nationwide through `change_events.json`, `change_zones.geojson`, and `change_points.geojson`.
 - `dashboard/data/change_summary_by_sido.json` provides per-sido counts for nationwide recent changes.
 

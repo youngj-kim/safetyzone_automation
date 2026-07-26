@@ -120,16 +120,16 @@ def feature_center(feature: dict[str, Any]) -> dict[str, float] | None:
     }
 
 
-def current_search_index(
+def current_search_index_by_sido(
     zones_by_sido: dict[str, dict[str, Any]],
     points_by_sido: dict[str, dict[str, Any]],
-) -> dict[str, Any]:
+) -> dict[str, dict[str, Any]]:
+    grouped_items: dict[str, list[dict[str, Any]]] = {}
     items: list[dict[str, Any]] = []
     for layer_type, grouped in (("Polygon", zones_by_sido), ("Point", points_by_sido)):
         for sido_code, geojson in grouped.items():
             for feature in geojson.get("features", []):
                 props = feature.get("properties", {})
-                center = feature_center(feature)
                 if layer_type == "Point" and props.get("facility_id"):
                     item_id = f"Point:{props.get('facility_id')}-{props.get('point_ordinal') or 0}"
                 else:
@@ -155,18 +155,20 @@ def current_search_index(
                     "zone_group_id": props.get("zone_group_id"),
                     "facility_type_code": props.get("facility_type_code"),
                 }
-                if center:
-                    item["center"] = center
                 items.append(item)
-    items.sort(
-        key=lambda item: (
-            str(item.get("sido_code") or ""),
-            str(item.get("facility_name") or ""),
-            str(item.get("source_manage_no") or ""),
-            str(item.get("layer_type") or ""),
+                grouped_items.setdefault(sido_code, []).append(item)
+    for region_items in grouped_items.values():
+        region_items.sort(
+            key=lambda item: (
+                str(item.get("facility_name") or ""),
+                str(item.get("source_manage_no") or ""),
+                str(item.get("layer_type") or ""),
+            )
         )
-    )
-    return {"items": items}
+    return {
+        code: {"items": region_items}
+        for code, region_items in sorted(grouped_items.items(), key=lambda item: item[0])
+    }
 
 
 def current_region_index(
@@ -1804,6 +1806,7 @@ class Repository:
         current_points = self.dashboard_current_points_geojson()
         zones_by_sido = group_feature_collection_by_sido(current_zones)
         points_by_sido = group_feature_collection_by_sido(current_points)
+        search_by_sido = current_search_index_by_sido(zones_by_sido, points_by_sido)
         change_events = self.dashboard_change_events(
             limit=event_limit,
             baseline_date=baseline_date,
@@ -1812,7 +1815,6 @@ class Repository:
             "overview.json": self.dashboard_overview(),
             "change_events.json": change_events,
             "current_index.json": current_region_index(zones_by_sido, points_by_sido),
-            "current_search_index.json": current_search_index(zones_by_sido, points_by_sido),
             "change_summary_by_sido.json": change_summary_by_sido(change_events),
             "change_zones.geojson": self.dashboard_change_zones_geojson(
                 limit=event_limit,
@@ -1832,20 +1834,25 @@ class Repository:
                 json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
                 encoding="utf-8",
             )
-        for obsolete_filename in ("current_zones.geojson", "current_points.geojson"):
+        for obsolete_filename in (
+            "current_zones.geojson",
+            "current_points.geojson",
+            "current_search_index.json",
+        ):
             obsolete_path = target / obsolete_filename
             if obsolete_path.exists():
                 obsolete_path.unlink()
-        for folder_name, grouped in (
-            ("current_zones", zones_by_sido),
-            ("current_points", points_by_sido),
+        for folder_name, grouped, extension in (
+            ("current_zones", zones_by_sido, "geojson"),
+            ("current_points", points_by_sido, "geojson"),
+            ("current_search", search_by_sido, "json"),
         ):
             folder = target / folder_name
             folder.mkdir(parents=True, exist_ok=True)
-            for old_file in folder.glob("*.geojson"):
+            for old_file in folder.glob(f"*.{extension}"):
                 old_file.unlink()
             for code, payload in grouped.items():
-                (folder / f"{code}.geojson").write_text(
+                (folder / f"{code}.{extension}").write_text(
                     json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
                     encoding="utf-8",
                 )

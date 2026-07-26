@@ -84,7 +84,7 @@ DB 관련 문서는 두 저장소에 나뉘어 있다.
 
 - `dashboard/`: GitHub Pages에 배포되는 정적 대시보드
 - `.github/workflows/pages.yml`: `dashboard/`를 `https://safetyzone.yjkim.dev`로 배포
-- `dashboard/data/*.json`, `dashboard/data/change_*.geojson`, `dashboard/data/current_zones/*.geojson`, `dashboard/data/current_points/*.geojson`: 공개 정적 대시보드 데이터
+- `dashboard/data/*.json`, `dashboard/data/change_*.geojson`, `dashboard/data/current_zones/*.geojson`, `dashboard/data/current_points/*.geojson`, `dashboard/data/current_search/*.json`: 공개 정적 대시보드 데이터
 - `dashboard/config.js`: 배포 시 `KAKAO_JS_KEY`로 생성되는 로컬/런타임 설정 파일. 커밋하지 않음
 
 ### 보호구역 모델

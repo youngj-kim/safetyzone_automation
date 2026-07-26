@@ -2,7 +2,7 @@ from safety_zone_monitor.db import (
     change_summary_by_sido,
     classify_sgg_coverage,
     current_region_index,
-    current_search_index,
+    current_search_index_by_sido,
     group_feature_collection_by_sido,
     sanitize_error_message,
 )
@@ -90,12 +90,15 @@ def test_current_dashboard_split_indexes_by_sido() -> None:
     zones_by_sido = group_feature_collection_by_sido(zones)
     points_by_sido = group_feature_collection_by_sido(points)
     region_index = current_region_index(zones_by_sido, points_by_sido)
-    search_index = current_search_index(zones_by_sido, points_by_sido)
+    search_index = current_search_index_by_sido(zones_by_sido, points_by_sido)
 
     assert sorted(zones_by_sido) == ["11"]
     assert sorted(points_by_sido) == ["41"]
     assert region_index["totals"] == {"zones": 1, "points": 1, "sgg_codes": 2}
-    assert {item["id"] for item in search_index["items"]} == {"Polygon:Z-1", "Point:P-1-2"}
+    assert {item["id"] for items in search_index.values() for item in items["items"]} == {
+        "Polygon:Z-1",
+        "Point:P-1-2",
+    }
 
 
 def test_change_summary_by_sido_groups_change_categories() -> None:

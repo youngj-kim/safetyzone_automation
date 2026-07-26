@@ -984,8 +984,11 @@ async function loadJson(path) {
 async function ensureCurrentSearchIndex() {
   if (state.currentSearchItems.length) return;
   if (!state.currentSearchIndexLoading) {
-    state.currentSearchIndexLoading = loadJson("data/current_search_index.json").then((payload) => {
-      state.currentSearchItems = payload.items || [];
+    const regions = state.currentIndex?.regions || [];
+    state.currentSearchIndexLoading = Promise.all(
+      regions.map((region) => loadJson(`data/current_search/${region.sido_code}.json`)),
+    ).then((payloads) => {
+      state.currentSearchItems = payloads.flatMap((payload) => payload.items || []);
       return state.currentSearchItems;
     });
   }

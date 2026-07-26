@@ -144,7 +144,7 @@ SGG_CODES_FILE=config/sgg_codes_nationwide.txt
 `dashboard/data/current_zones/{sido}.geojson`와
 `dashboard/data/current_points/{sido}.geojson`를 가져옵니다. 최근 변경 이벤트는 전국 단위로
 유지하며, 시도별 변경 건수는 `change_summary_by_sido.json`으로 표시합니다. 전국 현재 객체 검색은
-`current_search_index.json`을 사용하되 검색어 입력 시점에만 지연 로드합니다.
+`dashboard/data/current_search/{sido}.json`을 사용하되 검색어 입력 시점에만 지연 로드합니다.
 
 로컬에서 확인할 때는 저장소 루트에서 정적 파일 서버를 실행한 뒤 브라우저에서
 `http://localhost:8084/dashboard/`를 엽니다.
