@@ -50,6 +50,9 @@
           <label><input type="checkbox" data-layer="new" checked /> <span data-i18n="new">신규</span></label>
           <label><input type="checkbox" data-layer="changed" checked /> <span data-i18n="changed">변경</span></label>
           <label><input type="checkbox" data-layer="review" checked /> <span data-i18n="review">삭제(검토)</span></label>
+          <label><input type="checkbox" data-layer="ngiiZones" checked /> <span>NGII 상태</span></label>
+          <label><input type="checkbox" data-layer="ngiiMatchedLinks" checked /> <span>매칭 링크</span></label>
+          <label><input type="checkbox" data-layer="ngiiReviewLinks" checked /> <span>검수 도로</span></label>
         </section>
 
         <section class="activity-shell" aria-label="운영 이력">
@@ -89,6 +92,18 @@
             >
               <span class="tab-label" data-i18n="monitoringRuns">모니터링 이력</span>
               <span id="run-total">0건</span>
+            </button>
+            <button
+              id="ngii-tab"
+              class="activity-tab"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="ngii-panel"
+              data-panel="ngii"
+            >
+              <span class="tab-label">NGII 검수</span>
+              <span id="ngii-total">0</span>
             </button>
           </div>
 
@@ -157,6 +172,31 @@
           >
             <ol id="run-list" class="run-list"></ol>
           </section>
+
+          <section
+            id="ngii-panel"
+            class="activity-panel"
+            role="tabpanel"
+            aria-labelledby="ngii-tab"
+            hidden
+          >
+            <div class="filters" aria-label="NGII matching filters">
+              <select id="ngii-bucket">
+                <option value="NO_CANDIDATE_WITHIN_20M" selected>1순위: NGII도 주변 도로 없음</option>
+                <option value="NO_ACCEPTED_CANDIDATE_WITHIN_20M">2순위: 주변 도로는 있으나 후보 탈락</option>
+                <option value="A_NEAR_PARALLEL_ONLY_REVIEW">3순위: 근접 평행도로 확인</option>
+                <option value="B_WEAK_OVERLAP_REVIEW">4순위: 약한 중첩 확인</option>
+                <option value="AUTO_APPLY_LIKE_READY">참고: 자동 후보 유사</option>
+                <option value="">전체 보기</option>
+              </select>
+              <input id="ngii-search" type="search" placeholder="시설명, 관리번호, 자치구 코드 검색" />
+              <p class="review-guide">
+                회색은 NGII 기준으로도 도로가 안 잡힌 대상입니다. 주황은 도로축은 있으나 자동 확정하기 어려운 검수 대상입니다.
+              </p>
+              <div id="ngii-summary" class="region-summary"></div>
+            </div>
+            <ol id="ngii-list" class="ngii-list"></ol>
+          </section>
         </section>
       </section>
 
@@ -191,6 +231,10 @@
           <span><i class="swatch change-new"></i><span data-i18n="new">신규</span></span>
           <span><i class="swatch change-updated"></i><span data-i18n="changed">변경</span></span>
           <span><i class="swatch change-deleted"></i><span data-i18n="review">삭제(검토)</span></span>
+          <span><i class="swatch ngii-auto"></i><span>NGII 자동 유사</span></span>
+          <span><i class="swatch ngii-match"></i><span>매칭 링크</span></span>
+          <span><i class="swatch ngii-review"></i><span>NGII 검수</span></span>
+          <span><i class="swatch ngii-none"></i><span>NGII 후보 없음</span></span>
         </div>
       </section>
     </main>

@@ -435,6 +435,17 @@ input[type="checkbox"] {
   background: #fbfcfa;
 }
 
+.review-guide {
+  margin: 0;
+  padding: 9px 10px;
+  border-left: 3px solid #d97706;
+  border-radius: 6px;
+  color: #475569;
+  background: #fff8eb;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .list-section {
   min-height: 0;
 }
@@ -459,6 +470,7 @@ input[type="checkbox"] {
 
 .event-list,
 .current-list,
+.ngii-list,
 .run-list {
   display: grid;
   align-content: start;
@@ -472,6 +484,7 @@ input[type="checkbox"] {
 
 .event-item,
 .current-item,
+.ngii-item,
 .run-item {
   padding: 12px;
   border: 1px solid var(--line);
@@ -839,6 +852,32 @@ input[type="checkbox"] {
   background: var(--gray);
 }
 
+.ngii-badge {
+  color: #fff;
+  background: var(--ngii-bucket-color, #64748b);
+}
+
+.ngii-link-line {
+  color: #2563eb;
+  font-weight: 700;
+}
+
+.ngii-auto {
+  background: #16a34a;
+}
+
+.ngii-match {
+  background: #2563eb;
+}
+
+.ngii-review {
+  background: #d97706;
+}
+
+.ngii-none {
+  background: #475569;
+}
+
 @media (max-width: 900px) {
   .app-shell {
     display: block;
@@ -935,6 +974,7 @@ input[type="checkbox"] {
 
   .event-list,
   .current-list,
+  .ngii-list,
   .run-list {
     max-height: 34vh;
   }

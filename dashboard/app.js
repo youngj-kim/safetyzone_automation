@@ -22,6 +22,9 @@ const layerGroups = {
   new: L.layerGroup().addTo(map),
   changed: L.layerGroup().addTo(map),
   review: L.layerGroup().addTo(map),
+  ngiiZones: L.layerGroup().addTo(map),
+  ngiiMatchedLinks: L.layerGroup().addTo(map),
+  ngiiReviewLinks: L.layerGroup().addTo(map),
 };
 
 const state = {
@@ -59,6 +62,12 @@ const state = {
   polygonDeletedManageNos: new Set(),
   currentGroups: new Map(),
   changeSummaryBySido: null,
+  ngiiSummary: null,
+  ngiiItems: [],
+  ngiiLayers: new Map(),
+  ngiiFeatures: new Map(),
+  ngiiRepresentativeLinkFeatures: [],
+  ngiiReviewLinkFeatures: [],
 };
 document.body.dataset.dashboardVersion = "20260727-1";
 
@@ -758,6 +767,19 @@ function kakaoPathFromRing(ring) {
     .map(([lng, lat]) => new kakao.maps.LatLng(lat, lng));
 }
 
+function kakaoPathFromLineCoordinates(coordinates) {
+  return (coordinates || [])
+    .filter((coordinate) => Array.isArray(coordinate) && coordinate.length >= 2)
+    .map(([lng, lat]) => new kakao.maps.LatLng(lat, lng));
+}
+
+function linePathsFromGeometry(geometry) {
+  if (!geometry) return [];
+  if (geometry.type === "LineString") return [geometry.coordinates || []];
+  if (geometry.type === "MultiLineString") return geometry.coordinates || [];
+  return [];
+}
+
 function polygonRingsFromGeometry(geometry) {
   if (!geometry) return [];
   if (geometry.type === "Polygon") return geometry.coordinates || [];
@@ -778,6 +800,17 @@ function kakaoPointFromFeature(feature) {
 }
 
 function kakaoOverlayStyle(props, feature) {
+  if (props.ngii_bucket) {
+    const bucket = ngiiBucketInfo(props.ngii_bucket);
+    return {
+      color: bucket.color,
+      weight: props.link_role || props.link_id ? 4 : 2,
+      opacity: props.link_role || props.link_id ? 0.95 : 0.82,
+      fillColor: bucket.color,
+      fillOpacity: props.ngii_bucket === "AUTO_APPLY_LIKE_READY" ? 0.05 : 0.18,
+      radius: 5,
+    };
+  }
   if (props.change_type) {
     return {
       color: changeColor(props.change_type),
@@ -808,6 +841,8 @@ function activeLayerKeys() {
 }
 
 function kakaoCategoryForProps(props) {
+  if (props.ngii_category) return props.ngii_category;
+  if (props.ngii_bucket) return "ngiiZones";
   return props.change_type ? changeCategory(props.change_type) : currentLayerKey(props.facility_type_code);
 }
 
@@ -823,7 +858,13 @@ function setKakaoOverlayVisibility() {
 function openKakaoInfo(feature, props, position) {
   if (!state.kakao.infoWindow || !position) return;
   setSelectedLocation({ lat: position.getLat(), lng: position.getLng() }, props);
-  state.kakao.infoWindow.setContent(`<div class="kakao-info">${popupContent(props)}</div>`);
+  const content =
+    props.ngii_category === "ngiiMatchedLinks" || props.ngii_category === "ngiiReviewLinks"
+      ? ngiiLinkPopupContent(props)
+      : props.ngii_bucket
+        ? ngiiPopupContent(props)
+        : popupContent(props);
+  state.kakao.infoWindow.setContent(`<div class="kakao-info">${content}</div>`);
   state.kakao.infoWindow.setPosition(position);
   state.kakao.infoWindow.open(state.kakao.map);
 }
@@ -875,6 +916,24 @@ function addKakaoFeature(feature, rawProps = {}) {
   const category = kakaoCategoryForProps(props);
   const style = kakaoOverlayStyle(props, feature);
 
+  if (feature.geometry?.type === "LineString" || feature.geometry?.type === "MultiLineString") {
+    linePathsFromGeometry(feature.geometry).forEach((coordinates) => {
+      const path = kakaoPathFromLineCoordinates(coordinates);
+      if (path.length < 2) return;
+      const overlay = new kakao.maps.Polyline({
+        path,
+        strokeWeight: style.weight,
+        strokeColor: style.color,
+        strokeOpacity: style.opacity,
+        zIndex: props.ngii_category === "ngiiReviewLinks" ? 7 : 6,
+      });
+      const position = kakaoPointFromFeature(feature);
+      kakao.maps.event.addListener(overlay, "click", () => openKakaoInfo(feature, props, position));
+      registerKakaoOverlay(category, overlay);
+    });
+    return;
+  }
+
   if (feature.geometry?.type === "Point") {
     const position = kakaoPointFromFeature(feature);
     if (!position) return;
@@ -919,10 +978,29 @@ function buildKakaoCurrentOverlays() {
   state.currentFeatures.forEach((feature) => addKakaoFeature(feature, feature.properties || {}));
 }
 
+function buildKakaoNgiiOverlays() {
+  if (!state.kakao.enabled) return;
+  removeKakaoOverlays(["ngiiZones", "ngiiMatchedLinks", "ngiiReviewLinks"]);
+  state.ngiiFeatures.forEach((feature) => addKakaoFeature(feature, feature.properties || {}));
+  state.ngiiRepresentativeLinkFeatures.forEach((feature) =>
+    addKakaoFeature(feature, {
+      ngii_category: "ngiiMatchedLinks",
+      ...(feature.properties || {}),
+    }),
+  );
+  state.ngiiReviewLinkFeatures.forEach((feature) =>
+    addKakaoFeature(feature, {
+      ngii_category: "ngiiReviewLinks",
+      ...(feature.properties || {}),
+    }),
+  );
+}
+
 function buildKakaoOverlays() {
   if (!state.kakao.enabled) return;
   buildKakaoChangeOverlays();
   buildKakaoCurrentOverlays();
+  buildKakaoNgiiOverlays();
   setKakaoOverlayVisibility();
 }
 
@@ -2144,6 +2222,267 @@ function addChangeLayer(geojson) {
   return layers;
 }
 
+function ngiiBucketInfo(bucket) {
+  const labels = {
+    AUTO_APPLY_LIKE_READY: "자동 후보 유사",
+    A_NEAR_PARALLEL_ONLY_REVIEW: "근접 평행도로 확인",
+    B_WEAK_OVERLAP_REVIEW: "약한 중첩 확인",
+    NO_ACCEPTED_CANDIDATE_WITHIN_20M: "주변 도로 있으나 후보 탈락",
+    NO_CANDIDATE_WITHIN_20M: "NGII도 주변 도로 없음",
+  };
+  const colors = {
+    AUTO_APPLY_LIKE_READY: "#16a34a",
+    A_NEAR_PARALLEL_ONLY_REVIEW: "#d97706",
+    B_WEAK_OVERLAP_REVIEW: "#f59e0b",
+    NO_ACCEPTED_CANDIDATE_WITHIN_20M: "#dc2626",
+    NO_CANDIDATE_WITHIN_20M: "#475569",
+  };
+  return {
+    label: labels[bucket] || bucket || "Unknown",
+    color: colors[bucket] || "#64748b",
+  };
+}
+
+function ngiiBucketPriority(bucket) {
+  return {
+    NO_CANDIDATE_WITHIN_20M: 1,
+    NO_ACCEPTED_CANDIDATE_WITHIN_20M: 2,
+    A_NEAR_PARALLEL_ONLY_REVIEW: 3,
+    B_WEAK_OVERLAP_REVIEW: 4,
+    AUTO_APPLY_LIKE_READY: 5,
+  }[bucket] || 9;
+}
+
+function ngiiBucketReason(bucket) {
+  return {
+    NO_CANDIDATE_WITHIN_20M: "NGII 도로중심선으로도 20m 안 도로가 없어 원천 위치나 polygon 범위를 먼저 확인해야 합니다.",
+    NO_ACCEPTED_CANDIDATE_WITHIN_20M: "주변 도로는 있지만 스침/미세 인접 등으로 후보 기준을 통과하지 못했습니다.",
+    A_NEAR_PARALLEL_ONLY_REVIEW: "보호구역과 평행한 도로축이 있어 실제 적용 도로인지 확인이 필요합니다.",
+    B_WEAK_OVERLAP_REVIEW: "겹치기는 하지만 길이나 비율이 약해서 경계 스침인지 확인이 필요합니다.",
+    AUTO_APPLY_LIKE_READY: "geometry 기준으로는 자동 후보에 가깝지만 최종 확정은 표준링크 기준과 함께 봅니다.",
+  }[bucket] || "NGII 매칭 상태를 확인합니다.";
+}
+
+function ngiiSearchText(item) {
+  return [
+    item.facility_name,
+    facilityNameEn(item.facility_name),
+    item.source_manage_no,
+    item.sgg_code,
+    item.zone_group_id,
+    item.ngii_bucket,
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+function ngiiPopupContent(props) {
+  const bucket = ngiiBucketInfo(props.ngii_bucket);
+  const representativeLink = props.representative_link_id
+    ? `
+    <hr>
+    <strong>대표 링크</strong><br>
+    ID: ${props.representative_link_id}<br>
+    이름: ${escapeHtml(props.representative_link_name || "-")}<br>
+    역할: ${props.representative_link_role || "-"}<br>
+    규칙: ${props.representative_rule_code || "-"}<br>
+    거리: ${props.representative_distance_m ?? "-"}m<br>
+    내부중첩: ${props.representative_inside_m ?? "-"}m / ${props.representative_inside_ratio ?? "-"}<br>
+    버퍼중첩: ${props.representative_buffer_overlap_m ?? "-"}m / ${
+      props.representative_buffer_overlap_ratio ?? "-"
+    }<br>`
+    : "<hr><strong>대표 링크 없음</strong><br>";
+  return `
+    <strong>${escapeHtml(props.facility_name || t("noName"))}</strong><br>
+    <span style="color: ${bucket.color}; font-weight: 700">${bucket.label}</span><br>
+    ${escapeHtml(ngiiBucketReason(props.ngii_bucket))}<br>
+    ${t("manageNo")}: ${props.source_manage_no || "-"}<br>
+    ${t("sgg")}: ${props.sgg_code || "-"}<br>
+    NGII candidates: ${numberText(props.candidate_count)}<br>
+    Auto-like: ${numberText(props.auto_apply_like_count)}<br>
+    A: ${numberText(props.grade_a_count)} / B: ${numberText(props.grade_b_count)}<br>
+    Nearby within 20m: ${numberText(props.nearby_count)}<br>
+    Nearest: ${props.nearest_distance_m ?? "-"}m
+    ${representativeLink}
+  `;
+}
+
+function ngiiLinkPopupContent(props) {
+  return `
+    <strong>NGII ${escapeHtml(props.rule_code || "link")}</strong><br>
+    Link: ${props.link_id || "-"}<br>
+    Name: ${escapeHtml(props.name || props.rdnm || "-")}<br>
+    Role: ${props.link_role || "-"}<br>
+    Grade: ${props.candidate_grade || "-"}<br>
+    Distance: ${props.distance_m ?? "-"}m<br>
+    Inside: ${props.intersection_length_m ?? "-"}m / ${props.intersection_ratio ?? "-"}<br>
+    Buffer overlap: ${props.proximity_overlap_length_m ?? "-"}m / ${props.proximity_overlap_ratio ?? "-"}
+  `;
+}
+
+function renderNgiiSummary() {
+  const target = document.getElementById("ngii-summary");
+  if (!target || !state.ngiiSummary) return;
+  const rates = state.ngiiSummary.zone_coverage_rates || {};
+  const counts = state.ngiiSummary.zone_coverage_counts || {};
+  target.replaceChildren(
+    ...[
+      `서울 ${numberText(state.ngiiSummary.zone_total)}건`,
+      `1순위 ${numberText(counts.NO_CANDIDATE_WITHIN_20M || 0)}건`,
+      `2순위 ${numberText(counts.NO_ACCEPTED_CANDIDATE_WITHIN_20M || 0)}건`,
+      `자동 후보 유사 ${numberText(counts.AUTO_APPLY_LIKE_READY || 0)}건 (${rates.auto_apply_like_rate || 0}%)`,
+    ].map((text) => {
+      const chip = document.createElement("span");
+      chip.className = "region-chip";
+      chip.textContent = text;
+      return chip;
+    }),
+  );
+}
+
+function renderNgiiItems() {
+  const bucket = document.getElementById("ngii-bucket")?.value || "";
+  const query = (document.getElementById("ngii-search")?.value || "").trim().toLowerCase();
+  const filtered = state.ngiiItems.filter(
+    (item) => (!bucket || item.ngii_bucket === bucket) && (!query || ngiiSearchText(item).includes(query)),
+  ).sort((a, b) => {
+    const priority = ngiiBucketPriority(a.ngii_bucket) - ngiiBucketPriority(b.ngii_bucket);
+    if (priority !== 0) return priority;
+    return Number(a.nearest_distance_m ?? 9999) - Number(b.nearest_distance_m ?? 9999);
+  });
+  document.getElementById("ngii-total").textContent = numberText(filtered.length);
+  const list = document.getElementById("ngii-list");
+  if (!list) return;
+  list.replaceChildren(
+    ...filtered.slice(0, 180).map((item) => {
+      const bucketInfo = ngiiBucketInfo(item.ngii_bucket);
+      const names = facilityNameParts(item);
+      const listItem = document.createElement("li");
+      listItem.className = "ngii-item";
+      listItem.tabIndex = 0;
+      listItem.setAttribute("role", "button");
+      listItem.innerHTML = `
+        <div class="event-topline">
+          <span class="event-title">${escapeHtml(names.primary)}</span>
+          <span class="badge ngii-badge" style="--ngii-bucket-color: ${bucketInfo.color}">${bucketInfo.label}</span>
+        </div>
+        <div class="event-meta">
+          ${names.secondary ? `<span class="name-original">${escapeHtml(names.secondary)}</span><br>` : ""}
+          <span class="review-reason">${escapeHtml(ngiiBucketReason(item.ngii_bucket))}</span><br>
+          ${item.source_manage_no || "-"} · ${item.sgg_code || "-"}<br>
+          후보 ${numberText(item.candidate_count)} · 20m 내 도로 ${numberText(item.nearby_count)} · 최근접 ${
+            item.nearest_distance_m ?? "-"
+          }m
+          ${
+            item.representative_link_id
+              ? `<br><span class="ngii-link-line">대표 링크 ${escapeHtml(item.representative_link_id)} · ${
+                  item.representative_rule_code || "-"
+                } · ${item.representative_distance_m ?? "-"}m</span>`
+              : `<br><span class="ngii-link-line">대표 링크 없음</span>`
+          }
+        </div>
+      `;
+      const focus = () => focusNgiiItem(item);
+      listItem.addEventListener("click", focus);
+      listItem.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          focus();
+        }
+      });
+      return listItem;
+    }),
+  );
+}
+
+function focusNgiiItem(item) {
+  ensureLayerVisible("ngiiZones");
+  ensureLayerVisible("ngiiMatchedLinks");
+  const key = item.zone_id || item.source_manage_no;
+  const layer = state.ngiiLayers.get(key);
+  const feature = state.ngiiFeatures.get(key);
+  if (!layer || !feature) return;
+  const bounds = boundsFromFeature(feature);
+  const center = centerFromFeature(feature);
+  setSelectedLocation(center, item);
+  if (document.body.dataset.mapMode !== "osm" && focusKakaoFeature(feature, item, bounds)) {
+    return;
+  }
+  if (bounds?.isValid()) {
+    map.fitBounds(bounds.pad(0.35), { maxZoom: 17, animate: true });
+  }
+  layer.openPopup();
+}
+
+function addNgiiLayers(zoneGeojson, representativeLinkGeojson, reviewLinkGeojson) {
+  layerGroups.ngiiZones.clearLayers();
+  layerGroups.ngiiMatchedLinks.clearLayers();
+  layerGroups.ngiiReviewLinks.clearLayers();
+  state.ngiiItems = [];
+  state.ngiiLayers.clear();
+  state.ngiiFeatures.clear();
+  state.ngiiRepresentativeLinkFeatures = representativeLinkGeojson.features || [];
+  state.ngiiReviewLinkFeatures = reviewLinkGeojson.features || [];
+
+  L.geoJSON(zoneGeojson, {
+    style: (feature) => {
+      const bucket = ngiiBucketInfo(feature.properties?.ngii_bucket);
+      const isAuto = feature.properties?.ngii_bucket === "AUTO_APPLY_LIKE_READY";
+      return {
+        color: bucket.color,
+        weight: isAuto ? 1.1 : 2.4,
+        opacity: isAuto ? 0.45 : 0.95,
+        fillColor: bucket.color,
+        fillOpacity: isAuto ? 0.04 : 0.18,
+      };
+    },
+    onEachFeature: (feature, itemLayer) => {
+      const props = feature.properties || {};
+      const key = props.zone_id || props.source_manage_no;
+      state.ngiiItems.push(props);
+      state.ngiiLayers.set(key, itemLayer);
+      state.ngiiFeatures.set(key, feature);
+      itemLayer.on("click", () => setSelectedLocation(centerFromFeature(feature), props));
+      itemLayer.bindPopup(ngiiPopupContent(props));
+    },
+  }).addTo(layerGroups.ngiiZones);
+
+  L.geoJSON(representativeLinkGeojson, {
+    style: (feature) => {
+      const role = feature.properties?.link_role;
+      return {
+        color: role === "MATCHED_CANDIDATE" ? "#2563eb" : "#64748b",
+        weight: role === "MATCHED_CANDIDATE" ? 3.5 : 2.5,
+        opacity: role === "MATCHED_CANDIDATE" ? 0.88 : 0.58,
+        dashArray: role === "MATCHED_CANDIDATE" ? null : "6 5",
+      };
+    },
+    onEachFeature: (feature, itemLayer) => {
+      itemLayer.bindPopup(ngiiLinkPopupContent(feature.properties || {}));
+    },
+  }).addTo(layerGroups.ngiiMatchedLinks);
+
+  L.geoJSON(reviewLinkGeojson, {
+    style: (feature) => {
+      const rule = feature.properties?.rule_code;
+      const color = rule?.startsWith("A_") ? "#d97706" : rule?.startsWith("B_") ? "#f59e0b" : "#dc2626";
+      return {
+        color,
+        weight: 4,
+        opacity: 0.9,
+      };
+    },
+    onEachFeature: (feature, itemLayer) => {
+      itemLayer.bindPopup(ngiiLinkPopupContent(feature.properties || {}));
+    },
+  }).addTo(layerGroups.ngiiReviewLinks);
+
+  renderNgiiSummary();
+  renderNgiiItems();
+  buildKakaoNgiiOverlays();
+  setKakaoOverlayVisibility();
+}
+
 function bindLayerToggles() {
   document.querySelectorAll("[data-layer]").forEach((input) => {
     input.addEventListener("change", () => {
@@ -2295,6 +2634,8 @@ async function main() {
     void handleCurrentSearchInput();
   });
   document.getElementById("current-zone-type").addEventListener("change", renderCurrentItems);
+  document.getElementById("ngii-bucket").addEventListener("change", renderNgiiItems);
+  document.getElementById("ngii-search").addEventListener("input", renderNgiiItems);
   document.getElementById("current-sido").addEventListener("change", (event) => {
     void loadCurrentRegion(event.target.value, { fit: true });
   });
@@ -2307,6 +2648,10 @@ async function main() {
     changeZones,
     changePoints,
     timelines,
+    ngiiSummary,
+    ngiiZones,
+    ngiiRepresentativeLinks,
+    ngiiReviewLinks,
   ] = await Promise.all([
     loadJson("data/overview.json"),
     loadJson("data/change_events.json"),
@@ -2315,12 +2660,17 @@ async function main() {
     loadJson("data/change_zones.geojson"),
     loadJson("data/change_points.geojson"),
     loadJson("data/timelines.json"),
+    loadJson("data/ngii_seoul_match_summary.json"),
+    loadJson("data/ngii_seoul_match_zones.geojson"),
+    loadJson("data/ngii_seoul_representative_links.geojson"),
+    loadJson("data/ngii_seoul_review_links.geojson"),
   ]);
 
   renderOverview(overview);
   state.events = events.events || [];
   state.currentIndex = currentIndex;
   state.changeSummaryBySido = changeSummaryBySido;
+  state.ngiiSummary = ngiiSummary;
   renderCurrentRegionSelect();
   renderChangeSummaryBySido();
   state.timelines = new Map(
@@ -2340,6 +2690,7 @@ async function main() {
   );
   addChangeLayer(changeZones);
   addChangeLayer(changePoints);
+  addNgiiLayers(ngiiZones, ngiiRepresentativeLinks, ngiiReviewLinks);
   buildKakaoChangeOverlays();
   await loadCurrentRegion(state.selectedSido);
   renderEvents();

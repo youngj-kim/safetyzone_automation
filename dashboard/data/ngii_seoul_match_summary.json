@@ -1,0 +1,33 @@
+{
+  "scope": "Seoul safety-zone polygons, sgg_code LIKE 11%",
+  "zone_total": 1543,
+  "generated_at": "2026-07-27T06:10:19.091603+00:00",
+  "source_table": "raw.ngii_road_centerline_2026_simplified_05m_slim",
+  "candidate_pairs": 39672,
+  "zone_coverage_rates": {
+    "any_a_rate": 98.51,
+    "nearby_20m_rate": 99.35,
+    "any_candidate_rate": 98.57,
+    "auto_apply_like_rate": 98.38
+  },
+  "zone_coverage_counts": {
+    "AUTO_APPLY_LIKE_READY": 1518,
+    "B_WEAK_OVERLAP_REVIEW": 1,
+    "NO_CANDIDATE_WITHIN_20M": 10,
+    "A_NEAR_PARALLEL_ONLY_REVIEW": 2,
+    "NO_ACCEPTED_CANDIDATE_WITHIN_20M": 12
+  },
+  "excluded_counts_by_rule": {
+    "TINY_ADJACENCY": 3888,
+    "TOUCH_OR_GRAZE": 5668,
+    "GEOMETRY_RULE_EXCLUDED": 22945
+  },
+  "candidate_counts_by_rule": {
+    "A_SHORT_INSIDE": 29138,
+    "B_WEAK_OVERLAP": 239,
+    "A_STRONG_OVERLAP": 9834,
+    "A_NEAR_PARALLEL_CORRIDOR": 461
+  },
+  "representative_link_count": 1533,
+  "raw_nearby_pairs_within_20m": 72173
+}
