@@ -16,6 +16,7 @@ htmlcov/
 .actions-runner/
 .gitrepo/
 safety_zone_data/
+exports/
 .secrets/
 tmp/
 tmp_standard_node_link_spec.*

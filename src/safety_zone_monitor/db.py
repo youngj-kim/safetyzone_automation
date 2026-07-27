@@ -22,7 +22,16 @@ from safety_zone_monitor.diff import (
 )
 from safety_zone_monitor.normalize import FacilityPointRecord, ZoneRecord, clean_text, stable_hash
 
-DEFAULT_DASHBOARD_BASELINE_DATE = "2026-07-07"
+DEFAULT_DASHBOARD_BASELINE_DATE = "2026-07-25"
+DEFAULT_WORK_EXTRACT_CHANGE_TYPES = (
+    "NEW",
+    "GEOMETRY_CHANGED",
+    "ATTRIBUTE_CHANGED",
+    "GEOMETRY_ATTRIBUTE_CHANGED",
+    "POINT_CHANGED",
+    "POINT_ATTRIBUTE_CHANGED",
+    "DELETED",
+)
 SIDO_NAMES = {
     "11": "서울특별시",
     "12": "전라남도",
@@ -1618,6 +1627,7 @@ class Repository:
         *,
         limit: int = 500,
         baseline_date: str | None = DEFAULT_DASHBOARD_BASELINE_DATE,
+        change_types: tuple[str, ...] | None = None,
     ) -> dict[str, Any]:
         with self._connect() as connection:
             connection.execute("SET TRANSACTION READ ONLY")
@@ -1665,15 +1675,24 @@ class Repository:
                     ORDER BY (zs.run_id = e.run_id) DESC, zs.created_at DESC
                     LIMIT 1
                 ) AS g ON true
-                WHERE (%s::date IS NULL)
-                   OR NOT (
-                       e.change_type = 'NEW'
-                       AND (e.detected_at AT TIME ZONE 'Asia/Seoul')::date <= %s::date
-                   )
+                WHERE (
+                    (%s::date IS NULL)
+                    OR NOT (
+                        e.change_type = 'NEW'
+                        AND (e.detected_at AT TIME ZONE 'Asia/Seoul')::date <= %s::date
+                    )
+                )
+                  AND (%s::text[] IS NULL OR e.change_type = ANY(%s))
                 ORDER BY e.detected_at DESC
                 LIMIT %s
                 """,
-                (baseline_date, baseline_date, limit),
+                (
+                    baseline_date,
+                    baseline_date,
+                    list(change_types) if change_types else None,
+                    list(change_types) if change_types else None,
+                    limit,
+                ),
             ).fetchall()
             connection.rollback()
         return {
@@ -1707,6 +1726,7 @@ class Repository:
         *,
         limit: int = 500,
         baseline_date: str | None = DEFAULT_DASHBOARD_BASELINE_DATE,
+        change_types: tuple[str, ...] | None = None,
     ) -> dict[str, Any]:
         with self._connect() as connection:
             connection.execute("SET TRANSACTION READ ONLY")
@@ -1755,15 +1775,24 @@ class Repository:
                     ORDER BY (ps.run_id = e.run_id) DESC, ps.created_at DESC
                     LIMIT 1
                 ) AS g ON true
-                WHERE (%s::date IS NULL)
-                   OR NOT (
-                       e.change_type = 'NEW'
-                       AND (e.detected_at AT TIME ZONE 'Asia/Seoul')::date <= %s::date
-                   )
+                WHERE (
+                    (%s::date IS NULL)
+                    OR NOT (
+                        e.change_type = 'NEW'
+                        AND (e.detected_at AT TIME ZONE 'Asia/Seoul')::date <= %s::date
+                    )
+                )
+                  AND (%s::text[] IS NULL OR e.change_type = ANY(%s))
                 ORDER BY e.detected_at DESC
                 LIMIT %s
                 """,
-                (baseline_date, baseline_date, limit),
+                (
+                    baseline_date,
+                    baseline_date,
+                    list(change_types) if change_types else None,
+                    list(change_types) if change_types else None,
+                    limit,
+                ),
             ).fetchall()
             connection.rollback()
         return {
@@ -1856,6 +1885,50 @@ class Repository:
                     json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
                     encoding="utf-8",
                 )
+
+    def export_change_extracts(
+        self,
+        output_dir: str | Path,
+        *,
+        limit: int = 10000,
+        baseline_date: str | None = DEFAULT_DASHBOARD_BASELINE_DATE,
+        change_types: tuple[str, ...] = DEFAULT_WORK_EXTRACT_CHANGE_TYPES,
+    ) -> dict[str, Any]:
+        target = Path(output_dir)
+        target.mkdir(parents=True, exist_ok=True)
+        polygons = self.dashboard_change_zones_geojson(
+            limit=limit,
+            baseline_date=baseline_date,
+            change_types=change_types,
+        )
+        points = self.dashboard_change_points_geojson(
+            limit=limit,
+            baseline_date=baseline_date,
+            change_types=change_types,
+        )
+        summary = {
+            "baseline_date": baseline_date,
+            "change_types": list(change_types),
+            "files": {
+                "polygons": "polygons.geojson",
+                "points": "points.geojson",
+            },
+            "counts": {
+                "polygons": len(polygons["features"]),
+                "points": len(points["features"]),
+            },
+        }
+        datasets = {
+            "polygons.geojson": polygons,
+            "points.geojson": points,
+            "summary.json": summary,
+        }
+        for filename, payload in datasets.items():
+            (target / filename).write_text(
+                json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+                encoding="utf-8",
+            )
+        return summary
 
     def build_link_match_candidates(
         self,

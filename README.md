@@ -139,6 +139,16 @@ SGG_CODES_FILE=config/sgg_codes_nationwide.txt
   --baseline-date 2026-07-25
 ```
 
+신규/변경/삭제 이벤트만 후속 작업에 활용하려면 작업용 GeoJSON을 별도로 추출합니다. 기본값은
+`NEW`, 변경 계열, `DELETED`만 포함하고 `MISSING`은 제외합니다.
+
+```powershell
+.\.venv\Scripts\python.exe -m safety_zone_monitor export-change-extracts `
+  --output exports\change_extracts `
+  --limit 10000 `
+  --baseline-date 2026-07-25
+```
+
 전국 현재 객체는 단일 대용량 GeoJSON으로 배포하지 않고 시도 단위로 분할합니다.
 대시보드는 첫 화면에서 서울 현재 객체만 로드하고, 시도 선택 시
 `dashboard/data/current_zones/{sido}.geojson`와

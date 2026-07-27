@@ -102,6 +102,7 @@ node --check dashboard\app.js
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe -m safety_zone_monitor export-dashboard --output dashboard\data --event-limit 500 --baseline-date 2026-07-25
+.\.venv\Scripts\python.exe -m safety_zone_monitor export-change-extracts --output exports\change_extracts --limit 10000 --baseline-date 2026-07-25
 ```
 
 검증 결과:
@@ -127,17 +128,15 @@ node --check dashboard\app.js
 - `config.js?v=20260727-1`
 - `app.js?v=20260727-1`
 
-Satellite map mode update:
-
-- The map mode control now includes OSM / Kakao / 위성 / Roadview.
-- 위성 uses Kakao Maps `HYBRID` map type.
-- OSM/Kakao/위성/Roadview transitions preserve center and zoom.
-- Entering Roadview switches Kakao map type back to `ROADMAP`.
 Kakao layer update:
 
 - Kakao Point overlays now use pixel-based `CustomOverlay` markers instead of meter-radius circles.
 - Kakao current/change Point results should remain visible like OSM markers across zoom levels.
 - Kakao Polygon overlays, layer toggles, popups, and Roadview buttons remain enabled.
+- Satellite map mode is available through Kakao `HYBRID` map type.
+- The map mode control includes OSM / Kakao / 위성 / Roadview.
+- OSM/Kakao/위성/Roadview transitions preserve center and zoom.
+- Entering Roadview switches Kakao map type back to `ROADMAP`.
 
 Roadview panel update:
 

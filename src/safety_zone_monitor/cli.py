@@ -6,11 +6,19 @@ import logging
 from pathlib import Path
 
 from safety_zone_monitor.config import Settings
-from safety_zone_monitor.db import DEFAULT_DASHBOARD_BASELINE_DATE, Repository
+from safety_zone_monitor.db import (
+    DEFAULT_DASHBOARD_BASELINE_DATE,
+    DEFAULT_WORK_EXTRACT_CHANGE_TYPES,
+    Repository,
+)
 from safety_zone_monitor.diff import ChangeType, PointChangeType
 from safety_zone_monitor.notify import Notifier
 from safety_zone_monitor.pipeline import run_pipeline
 from safety_zone_monitor.sgg_codes import write_sgg_codes
+
+
+def _comma_values(value: str) -> tuple[str, ...]:
+    return tuple(item.strip() for item in value.replace("\n", ",").split(",") if item.strip())
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -46,6 +54,32 @@ def _parser() -> argparse.ArgumentParser:
         help=(
             "Exclude NEW dashboard events detected on or before this KST date; "
             "use an empty value to disable"
+        ),
+    )
+    extract = subparsers.add_parser(
+        "export-change-extracts",
+        help="Export changed polygon/point GeoJSON files for downstream work",
+    )
+    extract.add_argument(
+        "--output",
+        default="exports/change_extracts",
+        help="Directory for polygons.geojson, points.geojson, and summary.json",
+    )
+    extract.add_argument("--limit", type=int, default=10000, help="Maximum features per layer")
+    extract.add_argument(
+        "--baseline-date",
+        default=DEFAULT_DASHBOARD_BASELINE_DATE,
+        help=(
+            "Exclude NEW events detected on or before this KST date; "
+            "use an empty value to disable"
+        ),
+    )
+    extract.add_argument(
+        "--change-types",
+        default=",".join(DEFAULT_WORK_EXTRACT_CHANGE_TYPES),
+        help=(
+            "Comma-separated change types to extract. Defaults to NEW, change, and DELETED; "
+            "MISSING is excluded by default."
         ),
     )
     subparsers.add_parser(
@@ -130,6 +164,20 @@ def main() -> None:
             baseline_date=baseline_date,
         )
         print(f"Dashboard data exported to {output}.")
+        return
+    if args.command == "export-change-extracts":
+        output = Path(args.output)
+        baseline_date = args.baseline_date.strip() or None
+        change_types = _comma_values(args.change_types)
+        if not change_types:
+            raise ValueError("At least one change type is required")
+        summary = repository.export_change_extracts(
+            output,
+            limit=args.limit,
+            baseline_date=baseline_date,
+            change_types=change_types,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
         return
     if args.command == "build-link-candidates":
         if not settings.sgg_codes:
