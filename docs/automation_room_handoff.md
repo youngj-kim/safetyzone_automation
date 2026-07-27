@@ -123,10 +123,16 @@ node --check dashboard\app.js
 
 현재 기대 버전:
 
-- `styles.css?v=20260726-2`
-- `config.js?v=20260726-2`
-- `app.js?v=20260726-2`
+- `styles.css?v=20260727-1`
+- `config.js?v=20260727-1`
+- `app.js?v=20260727-1`
 
+Satellite map mode update:
+
+- The map mode control now includes OSM / Kakao / 위성 / Roadview.
+- 위성 uses Kakao Maps `HYBRID` map type.
+- OSM/Kakao/위성/Roadview transitions preserve center and zoom.
+- Entering Roadview switches Kakao map type back to `ROADMAP`.
 Kakao layer update:
 
 - Kakao Point overlays now use pixel-based `CustomOverlay` markers instead of meter-radius circles.

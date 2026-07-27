@@ -60,7 +60,7 @@ const state = {
   currentGroups: new Map(),
   changeSummaryBySido: null,
 };
-document.body.dataset.dashboardVersion = "20260726-2";
+document.body.dataset.dashboardVersion = "20260727-1";
 
 const dashboardConfig = window.SAFETYZONE_CONFIG || {};
 const queryParams = new URLSearchParams(window.location.search);
@@ -1115,7 +1115,7 @@ function moveRoadviewToPosition(position, loadingMessage) {
 
 async function setMapMode(mode) {
   const isOsm = mode === "osm";
-  const isKakaoMode = mode === "kakao" || mode === "roadview";
+  const isKakaoMode = mode === "kakao" || mode === "satellite" || mode === "roadview";
   rememberVisibleMapView();
   const osmViewBeforeSwitch = state.lastOsmView;
   const kakaoViewBeforeSwitch = state.lastKakaoView;
@@ -1138,16 +1138,19 @@ async function setMapMode(mode) {
   });
 
   if (isKakaoMode) {
-    if (mode === "kakao") {
+    if (mode === "kakao" || mode === "satellite") {
       const view = kakaoViewBeforeSwitch || osmViewBeforeSwitch;
       state.kakao.map.setCenter(new kakao.maps.LatLng(view.lat, view.lng));
       state.kakao.map.setLevel(view.level);
     }
+    state.kakao.map.setMapTypeId(
+      mode === "satellite" ? kakao.maps.MapTypeId.HYBRID : kakao.maps.MapTypeId.ROADMAP,
+    );
     setRoadviewLayerVisible(mode === "roadview");
     buildKakaoOverlays();
     requestAnimationFrame(() => {
       state.kakao.map.relayout();
-      if (mode === "kakao") {
+      if (mode === "kakao" || mode === "satellite") {
         const view = kakaoViewBeforeSwitch || osmViewBeforeSwitch;
         state.kakao.map.setCenter(new kakao.maps.LatLng(view.lat, view.lng));
         state.kakao.map.setLevel(view.level);
