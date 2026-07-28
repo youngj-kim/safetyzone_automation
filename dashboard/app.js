@@ -72,7 +72,7 @@ const state = {
   ngiiReviewLinkFeatures: [],
   selectedChangeSido: "",
 };
-document.body.dataset.dashboardVersion = "20260728-10";
+document.body.dataset.dashboardVersion = "20260728-11";
 
 const dashboardConfig = window.SAFETYZONE_CONFIG || {};
 const queryParams = new URLSearchParams(window.location.search);
@@ -2198,12 +2198,12 @@ function eventMatchesActiveEventFilters(event) {
   );
 }
 
-function changeExtractFilename(layerType) {
+function changeExtractFilename(layerType, changeType = selectedEventType() || "all_types") {
   const parts = [
     "safetyzone_changes",
     layerType.toLowerCase(),
     selectedEventDate() || "all_dates",
-    selectedEventType() || "all_types",
+    changeType,
     state.selectedChangeSido || "all_sido",
   ];
   return `${parts.join("_")}.geojson`;
@@ -2227,9 +2227,24 @@ function downloadFilteredChangeGeojson(layerType) {
   const features = state.changeFeatures
     .filter((feature) => feature.properties?.layer_type === layerType)
     .filter((feature) => eventMatchesActiveEventFilters(feature.properties || {}));
-  downloadGeojson(changeExtractFilename(layerType), {
-    type: "FeatureCollection",
-    features,
+  const groups = new Map();
+  features.forEach((feature) => {
+    const changeType = feature.properties?.change_type || "UNKNOWN";
+    if (!groups.has(changeType)) groups.set(changeType, []);
+    groups.get(changeType).push(feature);
+  });
+  if (!groups.size) {
+    downloadGeojson(changeExtractFilename(layerType, "empty"), {
+      type: "FeatureCollection",
+      features: [],
+    });
+    return;
+  }
+  [...groups.entries()].forEach(([changeType, groupedFeatures]) => {
+    downloadGeojson(changeExtractFilename(layerType, changeType), {
+      type: "FeatureCollection",
+      features: groupedFeatures,
+    });
   });
 }
 
