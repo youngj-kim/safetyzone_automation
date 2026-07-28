@@ -5,6 +5,7 @@ from safety_zone_monitor.db import (
     current_search_index_by_sido,
     dashboard_change_exclusion_policies,
     dashboard_changed_fields,
+    dashboard_geometry_change_info,
     group_feature_collection_by_sido,
     sanitize_error_message,
 )
@@ -139,6 +140,33 @@ def test_dashboard_changed_fields_lists_only_changed_attributes() -> None:
         {"field": "project_no", "label": "사업번호", "old": "P-1", "new": "P-2"},
         {"field": "last_modified_on", "label": "최종수정일", "old": None, "new": "2026-07-28"},
     ]
+
+
+def test_dashboard_geometry_change_info_classifies_area_direction() -> None:
+    expanded = dashboard_geometry_change_info(
+        "GEOMETRY_CHANGED",
+        old_area_m2=100.0,
+        new_area_m2=125.0,
+        intersection_area_m2=95.0,
+    )
+    reshaped = dashboard_geometry_change_info(
+        "GEOMETRY_ATTRIBUTE_CHANGED",
+        old_area_m2=100.0,
+        new_area_m2=100.4,
+        intersection_area_m2=80.0,
+    )
+
+    assert expanded == {
+        "direction": "EXPANDED",
+        "old_area_m2": 100.0,
+        "new_area_m2": 125.0,
+        "area_delta_m2": 25.0,
+        "area_delta_ratio": 0.25,
+        "intersection_area_m2": 95.0,
+        "overlap_ratio": 0.76,
+    }
+    assert reshaped["direction"] == "RESHAPED"
+    assert dashboard_geometry_change_info("NEW", None, 100.0, None) is None
 
 
 def test_dashboard_change_exclusion_policies_document_incheon_reorg() -> None:

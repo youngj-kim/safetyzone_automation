@@ -71,7 +71,7 @@ const state = {
   ngiiRepresentativeLinkFeatures: [],
   ngiiReviewLinkFeatures: [],
 };
-document.body.dataset.dashboardVersion = "20260728-7";
+document.body.dataset.dashboardVersion = "20260728-8";
 
 const dashboardConfig = window.SAFETYZONE_CONFIG || {};
 const queryParams = new URLSearchParams(window.location.search);
@@ -638,6 +638,42 @@ function changedFieldsHtml(props, limit = 4) {
   if (!summary) return "";
   const label = state.language === "en" ? "Changed Fields" : "변경 항목";
   return `<span class="changed-fields"><b>${label}</b>: ${escapeHtml(summary)}</span><br>`;
+}
+
+function geometryChangeDirectionLabel(direction) {
+  const labels = {
+    EXPANDED: { ko: "확장", en: "Expanded" },
+    SHRUNK: { ko: "축소", en: "Shrunk" },
+    RESHAPED: { ko: "형상변경", en: "Reshaped" },
+  };
+  return labels[direction]?.[state.language] || direction || "";
+}
+
+function signedAreaText(value) {
+  const numeric = Number(value || 0);
+  const sign = numeric > 0 ? "+" : "";
+  return `${sign}${numberText(Math.round(numeric * 10) / 10)}㎡`;
+}
+
+function percentText(value) {
+  if (value === null || value === undefined) return "-";
+  return `${Math.round(Number(value) * 1000) / 10}%`;
+}
+
+function geometryChangeSummary(props) {
+  const info = props.geometry_change_info;
+  if (!info) return "";
+  const overlapLabel = state.language === "en" ? "overlap" : "중첩";
+  return `${geometryChangeDirectionLabel(info.direction)} ${signedAreaText(
+    info.area_delta_m2,
+  )} · ${overlapLabel} ${percentText(info.overlap_ratio)}`;
+}
+
+function geometryChangeHtml(props) {
+  const summary = geometryChangeSummary(props);
+  if (!summary) return "";
+  const label = state.language === "en" ? "Geometry" : "도형";
+  return `<span class="changed-fields geometry-change-info"><b>${label}</b>: ${escapeHtml(summary)}</span><br>`;
 }
 
 function eventKey(props) {
@@ -1512,6 +1548,7 @@ function popupContent(props) {
   const review = enriched.review_reason
     ? `${t("reviewLabel")}: ${escapeHtml(enriched.review_reason)}<br>`
     : "";
+  const geometryChange = geometryChangeHtml(props);
   const changedFields = changedFieldsHtml(props);
   const zoneType = zoneTypeInfo(props.facility_type_code);
   const apiDates =
@@ -1528,6 +1565,7 @@ function popupContent(props) {
     ${t("sgg")}: ${props.sgg_code || "-"}<br>
     ${t("group")}: ${props.zone_group_id || "-"}<br>
     ${apiDates}
+    ${geometryChange}
     ${changedFields}
     ${review}
     ${popupTimelineContent(props)}
@@ -2213,6 +2251,7 @@ function renderEvents() {
       const enriched = enrichReviewProperties(event);
       const zoneType = zoneTypeInfo(event.facility_type_code);
       const names = facilityNameParts(event);
+      const geometrySummary = geometryChangeSummary(event);
       const fieldSummary = changedFieldsSummary(event);
       const item = document.createElement("li");
       item.className = "event-item";
@@ -2238,6 +2277,7 @@ function renderEvents() {
               ? `<span>${t("apiLast")} ${formatApiDate(event.api_last_modified_on)}</span><br>`
               : ""
           }
+          ${geometrySummary ? `<span class="changed-fields geometry-change-info">${escapeHtml(geometrySummary)}</span><br>` : ""}
           ${fieldSummary ? `<span class="changed-fields">${escapeHtml(fieldSummary)}</span><br>` : ""}
           ${formatDate(event.detected_at)}
         </div>

@@ -146,6 +146,44 @@ def dashboard_changed_fields(
     return changes
 
 
+def dashboard_geometry_change_info(
+    change_type: str | None,
+    old_area_m2: float | None,
+    new_area_m2: float | None,
+    intersection_area_m2: float | None,
+) -> dict[str, Any] | None:
+    if change_type not in {"GEOMETRY_CHANGED", "GEOMETRY_ATTRIBUTE_CHANGED"}:
+        return None
+    if old_area_m2 is None or new_area_m2 is None:
+        return None
+
+    old_area = round(float(old_area_m2), 2)
+    new_area = round(float(new_area_m2), 2)
+    delta = round(new_area - old_area, 2)
+    base_area = old_area if old_area else None
+    delta_ratio = round(delta / old_area, 6) if base_area else None
+    intersection_area = round(float(intersection_area_m2 or 0.0), 2)
+    overlap_base = max(old_area, new_area)
+    overlap_ratio = round(intersection_area / overlap_base, 6) if overlap_base else None
+
+    if abs(delta) < 1.0:
+        direction = "RESHAPED"
+    elif delta > 0:
+        direction = "EXPANDED"
+    else:
+        direction = "SHRUNK"
+
+    return {
+        "direction": direction,
+        "old_area_m2": old_area,
+        "new_area_m2": new_area,
+        "area_delta_m2": delta,
+        "area_delta_ratio": delta_ratio,
+        "intersection_area_m2": intersection_area,
+        "overlap_ratio": overlap_ratio,
+    }
+
+
 def group_feature_collection_by_sido(
     geojson: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
@@ -1272,8 +1310,38 @@ class Repository:
                         AS facility_type_code,
                     old_snapshot,
                     new_snapshot,
+                    CASE
+                        WHEN change_type IN ('GEOMETRY_CHANGED', 'GEOMETRY_ATTRIBUTE_CHANGED')
+                            THEN ST_Area(old_g.geom)
+                    END AS old_area_m2,
+                    CASE
+                        WHEN change_type IN ('GEOMETRY_CHANGED', 'GEOMETRY_ATTRIBUTE_CHANGED')
+                            THEN ST_Area(new_g.geom)
+                    END AS new_area_m2,
+                    CASE
+                        WHEN change_type IN ('GEOMETRY_CHANGED', 'GEOMETRY_ATTRIBUTE_CHANGED')
+                            THEN ST_Area(ST_Intersection(old_g.geom, new_g.geom))
+                    END AS intersection_area_m2,
                     detected_at
                 FROM analysis.zone_change_event
+                LEFT JOIN LATERAL (
+                    SELECT zs.geom
+                    FROM analysis.zone_snapshot AS zs
+                    WHERE zs.zone_id = analysis.zone_change_event.zone_id
+                      AND zs.geom_hash = analysis.zone_change_event.old_geom_hash
+                    ORDER BY zs.created_at DESC
+                    LIMIT 1
+                ) AS old_g ON true
+                LEFT JOIN LATERAL (
+                    SELECT zs.geom
+                    FROM analysis.zone_snapshot AS zs
+                    WHERE zs.zone_id = analysis.zone_change_event.zone_id
+                      AND zs.geom_hash = analysis.zone_change_event.new_geom_hash
+                    ORDER BY
+                        (zs.run_id = analysis.zone_change_event.run_id) DESC,
+                        zs.created_at DESC
+                    LIMIT 1
+                ) AS new_g ON true
                 WHERE (
                     (%s::date IS NULL)
                     OR NOT (
@@ -1332,6 +1400,9 @@ class Repository:
                         AS facility_type_code,
                     old_snapshot,
                     new_snapshot,
+                    NULL::double precision AS old_area_m2,
+                    NULL::double precision AS new_area_m2,
+                    NULL::double precision AS intersection_area_m2,
                     detected_at
                 FROM analysis.zone_facility_point_change_event
                 WHERE (
@@ -1362,7 +1433,7 @@ class Repository:
 
         rows = sorted(
             [*polygon_rows, *point_rows],
-            key=lambda row: row[13],
+            key=lambda row: row[16],
             reverse=True,
         )[:limit]
         payload = {
@@ -1380,7 +1451,10 @@ class Repository:
                     "api_last_modified_on": row[9],
                     "facility_type_code": row[10],
                     "changed_fields": dashboard_changed_fields(row[11], row[12]),
-                    "detected_at": row[13].isoformat() if row[13] else None,
+                    "geometry_change_info": dashboard_geometry_change_info(
+                        row[3], row[13], row[14], row[15]
+                    ),
+                    "detected_at": row[16].isoformat() if row[16] else None,
                 }
                 for row in rows
             ]
@@ -1431,8 +1505,38 @@ class Repository:
                         AS facility_type_code,
                     old_snapshot,
                     new_snapshot,
+                    CASE
+                        WHEN change_type IN ('GEOMETRY_CHANGED', 'GEOMETRY_ATTRIBUTE_CHANGED')
+                            THEN ST_Area(old_g.geom)
+                    END AS old_area_m2,
+                    CASE
+                        WHEN change_type IN ('GEOMETRY_CHANGED', 'GEOMETRY_ATTRIBUTE_CHANGED')
+                            THEN ST_Area(new_g.geom)
+                    END AS new_area_m2,
+                    CASE
+                        WHEN change_type IN ('GEOMETRY_CHANGED', 'GEOMETRY_ATTRIBUTE_CHANGED')
+                            THEN ST_Area(ST_Intersection(old_g.geom, new_g.geom))
+                    END AS intersection_area_m2,
                     detected_at
                 FROM analysis.zone_change_event
+                LEFT JOIN LATERAL (
+                    SELECT zs.geom
+                    FROM analysis.zone_snapshot AS zs
+                    WHERE zs.zone_id = analysis.zone_change_event.zone_id
+                      AND zs.geom_hash = analysis.zone_change_event.old_geom_hash
+                    ORDER BY zs.created_at DESC
+                    LIMIT 1
+                ) AS old_g ON true
+                LEFT JOIN LATERAL (
+                    SELECT zs.geom
+                    FROM analysis.zone_snapshot AS zs
+                    WHERE zs.zone_id = analysis.zone_change_event.zone_id
+                      AND zs.geom_hash = analysis.zone_change_event.new_geom_hash
+                    ORDER BY
+                        (zs.run_id = analysis.zone_change_event.run_id) DESC,
+                        zs.created_at DESC
+                    LIMIT 1
+                ) AS new_g ON true
                 WHERE (
                     (%s::date IS NULL)
                     OR NOT (
@@ -1491,6 +1595,9 @@ class Repository:
                         AS facility_type_code,
                     old_snapshot,
                     new_snapshot,
+                    NULL::double precision AS old_area_m2,
+                    NULL::double precision AS new_area_m2,
+                    NULL::double precision AS intersection_area_m2,
                     detected_at
                 FROM analysis.zone_facility_point_change_event
                 WHERE (
@@ -1546,7 +1653,7 @@ class Repository:
             connection.rollback()
 
         grouped: dict[str, dict[str, Any]] = {}
-        rows = sorted([*polygon_rows, *point_rows], key=lambda row: row[13], reverse=True)
+        rows = sorted([*polygon_rows, *point_rows], key=lambda row: row[16], reverse=True)
         for row in rows:
             layer_type = row[0]
             source_manage_no = row[5]
@@ -1566,7 +1673,10 @@ class Repository:
                 "api_last_modified_on": row[9],
                 "facility_type_code": row[10],
                 "changed_fields": dashboard_changed_fields(row[11], row[12]),
-                "detected_at": row[13].isoformat() if row[13] else None,
+                "geometry_change_info": dashboard_geometry_change_info(
+                    row[3], row[13], row[14], row[15]
+                ),
+                "detected_at": row[16].isoformat() if row[16] else None,
             }
             if entity_key not in grouped:
                 grouped[entity_key] = {
@@ -1804,6 +1914,18 @@ class Repository:
                         AS facility_type_code,
                     e.old_snapshot,
                     e.new_snapshot,
+                    CASE
+                        WHEN e.change_type IN ('GEOMETRY_CHANGED', 'GEOMETRY_ATTRIBUTE_CHANGED')
+                            THEN ST_Area(old_g.geom)
+                    END AS old_area_m2,
+                    CASE
+                        WHEN e.change_type IN ('GEOMETRY_CHANGED', 'GEOMETRY_ATTRIBUTE_CHANGED')
+                            THEN ST_Area(new_g.geom)
+                    END AS new_area_m2,
+                    CASE
+                        WHEN e.change_type IN ('GEOMETRY_CHANGED', 'GEOMETRY_ATTRIBUTE_CHANGED')
+                            THEN ST_Area(ST_Intersection(old_g.geom, new_g.geom))
+                    END AS intersection_area_m2,
                     e.detected_at,
                     ST_AsGeoJSON(ST_Transform(g.geom, 4326)) AS geometry
                 FROM analysis.zone_change_event AS e
@@ -1815,6 +1937,22 @@ class Repository:
                     ORDER BY (zs.run_id = e.run_id) DESC, zs.created_at DESC
                     LIMIT 1
                 ) AS g ON true
+                LEFT JOIN LATERAL (
+                    SELECT zs.geom
+                    FROM analysis.zone_snapshot AS zs
+                    WHERE zs.zone_id = e.zone_id
+                      AND zs.geom_hash = e.old_geom_hash
+                    ORDER BY zs.created_at DESC
+                    LIMIT 1
+                ) AS old_g ON true
+                LEFT JOIN LATERAL (
+                    SELECT zs.geom
+                    FROM analysis.zone_snapshot AS zs
+                    WHERE zs.zone_id = e.zone_id
+                      AND zs.geom_hash = e.new_geom_hash
+                    ORDER BY (zs.run_id = e.run_id) DESC, zs.created_at DESC
+                    LIMIT 1
+                ) AS new_g ON true
                 WHERE (
                     (%s::date IS NULL)
                     OR NOT (
@@ -1862,9 +2000,12 @@ class Repository:
                         "api_last_modified_on": row[9],
                         "facility_type_code": row[10],
                         "changed_fields": dashboard_changed_fields(row[11], row[12]),
-                        "detected_at": row[13].isoformat() if row[13] else None,
+                        "geometry_change_info": dashboard_geometry_change_info(
+                            row[3], row[13], row[14], row[15]
+                        ),
+                        "detected_at": row[16].isoformat() if row[16] else None,
                     },
-                    "geometry": json.loads(row[14]),
+                    "geometry": json.loads(row[17]),
                 }
                 for row in rows
             ],

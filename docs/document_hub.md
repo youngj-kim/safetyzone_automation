@@ -12,6 +12,7 @@
 |---|---|
 | 전체 구조를 빠르게 다시 잡을 때 | `README.md` |
 | 현재 진행 상태를 확인할 때 | `docs/mvp_project_status.md` |
+| 보호구역 프로젝트 시작 이후 주요 일자별 기록을 볼 때 | `docs/project_history.md` |
 | 1번방에서 커밋/푸시/대시보드 배포 인수인계를 받을 때 | `docs/automation_room_handoff.md` |
 | 배포된 대시보드와 전국 기준선 범위를 확인할 때 | `docs/project_scope_nationwide_dashboard_20260723.md` |
 | safetyzone이 표준노드링크 DB를 어떻게 쓰는지 볼 때 | `docs/standard_node_link_db_contract.md` |
@@ -22,7 +23,7 @@
 
 | 채팅방 역할 | 관련 문서 |
 |---|---|
-| 1번 자동화 설계 | `docs/document_hub.md`, `README.md`, `docs/mvp_project_status.md`, `docs/automation_room_handoff.md` |
+| 1번 자동화 설계 | `docs/document_hub.md`, `README.md`, `docs/mvp_project_status.md`, `docs/project_history.md`, `docs/automation_room_handoff.md` |
 | DB 구축 및 운영 | `docs/standard_node_link_db_contract.md`, `D:\standard-node-link-postgis\docs\db_operations_runbook.md` |
 | 5번 NGII 도로중심선 PostGIS | `docs/ngii_road_centerline_postgis.md` |
 | 보호구역 수집/변경 감지 자동화 | `README.md`, `docs/database_table_guide.md`, `docs/change_event_verification.md` |
@@ -55,6 +56,7 @@ DB 관련 문서는 두 저장소에 나뉘어 있다.
 
 - `README.md`: 프로젝트 개요, 기존 DB 계약, 실행 순서
 - `docs/mvp_project_status.md`: 현재 MVP 진행 상태
+- `docs/project_history.md`: 보호구역 프로젝트 시작 이후 주요 일자별 히스토리
 - `docs/document_hub.md`: 문서 탐색 중앙 입구
 - `docs/automation_room_handoff.md`: 1번방 커밋, 푸시, GitHub Pages 배포 인수인계
 - `docs/m0_inventory_report.md`: 기존 표준노드링크 환경 감사 결과
