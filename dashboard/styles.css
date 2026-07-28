@@ -514,6 +514,86 @@ input[type="checkbox"] {
   background: #fbfcfa;
 }
 
+.region-chip-button {
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.region-chip-button:hover,
+.region-chip-button:focus-visible {
+  border-color: var(--green);
+  color: var(--text);
+  background: #f2fbf5;
+}
+
+.region-change-popover {
+  position: sticky;
+  left: 0;
+  z-index: 20;
+  display: grid;
+  gap: 8px;
+  width: min(360px, 100%);
+  margin: 4px 0 6px;
+  padding: 10px;
+  border: 1px solid #c8d7cd;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+}
+
+.region-popover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.region-popover-head button,
+.region-change-popover li button {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.region-change-popover p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.region-change-popover ol {
+  display: grid;
+  gap: 4px;
+  max-height: 220px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.region-change-popover li button {
+  display: grid;
+  width: 100%;
+  gap: 2px;
+  padding: 7px;
+  border-radius: 6px;
+  color: var(--text);
+  text-align: left;
+}
+
+.region-change-popover li button:hover,
+.region-change-popover li button:focus-visible {
+  background: #eef7f1;
+}
+
+.region-change-popover small,
+.region-popover-more {
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .exclusion-note {
   align-items: flex-start;
   border-color: #f2c572;
