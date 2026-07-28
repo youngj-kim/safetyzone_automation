@@ -70,8 +70,9 @@ const state = {
   ngiiFeatures: new Map(),
   ngiiRepresentativeLinkFeatures: [],
   ngiiReviewLinkFeatures: [],
+  selectedChangeSido: "",
 };
-document.body.dataset.dashboardVersion = "20260728-8";
+document.body.dataset.dashboardVersion = "20260728-9";
 
 const dashboardConfig = window.SAFETYZONE_CONFIG || {};
 const queryParams = new URLSearchParams(window.location.search);
@@ -1959,12 +1960,14 @@ function renderChangeSummaryBySido() {
       const item = document.createElement("button");
       item.type = "button";
       item.className = "region-chip region-chip-button";
+      item.setAttribute("aria-pressed", String(state.selectedChangeSido === region.sido_code));
+      if (state.selectedChangeSido === region.sido_code) item.classList.add("selected");
       item.textContent = `${formatSidoName(region)} ${countText(region.total)} · ${t("new")} ${numberText(
         region.new,
       )} · ${t("changed")} ${numberText(region.changed)} · ${t("review")} ${numberText(
         region.deleted_or_review,
       )}`;
-      item.addEventListener("click", () => showRegionChangePopover(region, item));
+      item.addEventListener("click", () => selectChangeSido(region.sido_code));
       return item;
     }),
   );
@@ -1976,49 +1979,11 @@ function renderChangeSummaryBySido() {
   }
 }
 
-function showRegionChangePopover(region, anchor) {
-  document.querySelectorAll(".region-change-popover").forEach((popover) => popover.remove());
-  const events = state.events
-    .filter(eventMatchesDateAndType)
-    .filter((event) => String(event.sgg_code || "").slice(0, 2) === region.sido_code);
-  const popover = document.createElement("div");
-  popover.className = "region-change-popover";
-  popover.innerHTML = `
-    <div class="region-popover-head">
-      <strong>${escapeHtml(formatSidoName(region))}</strong>
-      <button type="button" aria-label="Close">×</button>
-    </div>
-    <p>${countText(events.length)} · ${t("new")} ${numberText(region.new)} · ${t("changed")} ${numberText(
-      region.changed,
-    )} · ${t("review")} ${numberText(region.deleted_or_review)}</p>
-    <ol></ol>
-  `;
-  const list = popover.querySelector("ol");
-  list.replaceChildren(
-    ...events.slice(0, 8).map((event) => {
-      const item = document.createElement("li");
-      const button = document.createElement("button");
-      button.type = "button";
-      button.innerHTML = `
-        <span>${escapeHtml(facilityNameParts(event).primary)}</span>
-        <small>${changeTypeLabel(event.change_type)} · ${event.layer_type} · ${formatDate(event.detected_at)}</small>
-      `;
-      button.addEventListener("click", () => {
-        popover.remove();
-        focusEvent(event);
-      });
-      item.appendChild(button);
-      return item;
-    }),
-  );
-  if (events.length > 8) {
-    const item = document.createElement("li");
-    item.className = "region-popover-more";
-    item.textContent = state.language === "en" ? `+${events.length - 8} more` : `외 ${events.length - 8}건`;
-    list.appendChild(item);
-  }
-  popover.querySelector("button[aria-label='Close']").addEventListener("click", () => popover.remove());
-  anchor.insertAdjacentElement("afterend", popover);
+function selectChangeSido(sidoCode) {
+  state.selectedChangeSido = state.selectedChangeSido === sidoCode ? "" : sidoCode;
+  renderChangeSummaryBySido();
+  renderEvents();
+  renderFilteredChangeLayers();
 }
 
 function changeSummaryRegionName(code) {
@@ -2226,6 +2191,13 @@ function eventMatchesDateAndType(event) {
   return (!type || event.change_type === type) && (!date || eventDetectedDate(event) === date);
 }
 
+function eventMatchesActiveEventFilters(event) {
+  return (
+    eventMatchesDateAndType(event) &&
+    (!state.selectedChangeSido || String(event.sgg_code || "").slice(0, 2) === state.selectedChangeSido)
+  );
+}
+
 function renderEventDateOptions() {
   const select = document.getElementById("event-date");
   if (!select) return;
@@ -2241,7 +2213,7 @@ function renderEventDateOptions() {
 function renderEvents() {
   const query = document.getElementById("event-search").value.trim().toLowerCase();
   const filtered = state.events.filter((event) => {
-    return eventMatchesDateAndType(event) && (!query || searchableText(event).includes(query));
+    return eventMatchesActiveEventFilters(event) && (!query || searchableText(event).includes(query));
   });
 
   document.getElementById("event-total").textContent = countText(filtered.length);
@@ -2421,7 +2393,7 @@ function addChangeLayer(geojson) {
   const layers = [];
   (geojson.features || []).forEach((feature) => {
     feature.properties = featureProperties(feature);
-    if (!eventMatchesDateAndType(feature.properties)) return;
+    if (!eventMatchesActiveEventFilters(feature.properties)) return;
     const category = changeCategory(feature.properties?.change_type);
     const layer = L.geoJSON(feature, {
       style: (item) => ({
@@ -2463,7 +2435,7 @@ function renderFilteredChangeLayers() {
 
   addChangeLayer({ type: "FeatureCollection", features: state.changeFeatures });
   state.changeFeatures.forEach((feature) => {
-    if (eventMatchesDateAndType(feature.properties || {})) {
+    if (eventMatchesActiveEventFilters(feature.properties || {})) {
       state.eventFeatures.set(eventKey(feature.properties), feature);
     }
   });
@@ -2472,7 +2444,7 @@ function renderFilteredChangeLayers() {
 }
 
 function applyEventFilters() {
-  document.querySelectorAll(".region-change-popover").forEach((popover) => popover.remove());
+  state.selectedChangeSido = "";
   renderEvents();
   renderChangeSummaryBySido();
   renderFilteredChangeLayers();
