@@ -71,7 +71,7 @@ const state = {
   ngiiRepresentativeLinkFeatures: [],
   ngiiReviewLinkFeatures: [],
 };
-document.body.dataset.dashboardVersion = "20260728-4";
+document.body.dataset.dashboardVersion = "20260728-5";
 
 const dashboardConfig = window.SAFETYZONE_CONFIG || {};
 const queryParams = new URLSearchParams(window.location.search);
@@ -1852,32 +1852,6 @@ function renderOverview(overview) {
 function renderChangeSummaryBySido() {
   const target = document.getElementById("change-region-summary");
   if (!target || !state.changeSummaryBySido) return;
-  const regions = state.changeSummaryBySido.regions || [];
-  if (!regions.length) {
-    target.textContent = "No nationwide change events after baseline.";
-    return;
-  }
-  target.replaceChildren(
-    ...regions.map((region) => {
-      const item = document.createElement("span");
-      item.className = "region-chip";
-      item.textContent = `${region.sido_name} ${numberText(region.total)} · N ${numberText(
-        region.new,
-      )} · C ${numberText(region.changed)} · R ${numberText(region.deleted_or_review)}`;
-      return item;
-    }),
-  );
-  for (const rule of exclusionRules) {
-    const item = document.createElement("span");
-    item.className = "region-chip exclusion-note";
-    item.textContent = `${rule.label}: ${rule.reason}`;
-    target.appendChild(item);
-  }
-}
-
-function renderChangeSummaryBySido() {
-  const target = document.getElementById("change-region-summary");
-  if (!target || !state.changeSummaryBySido) return;
   const regions = buildFilteredChangeSummaryBySido();
   const selectedDate = selectedEventDate();
   const exclusionRules = (state.changeExclusions?.rules || []).filter(
@@ -1899,6 +1873,12 @@ function renderChangeSummaryBySido() {
       return item;
     }),
   );
+  for (const rule of exclusionRules) {
+    const item = document.createElement("span");
+    item.className = "region-chip exclusion-note";
+    item.textContent = `${rule.label}: ${rule.reason}`;
+    target.appendChild(item);
+  }
 }
 
 function changeSummaryRegionName(code) {
