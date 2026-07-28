@@ -71,7 +71,7 @@ const state = {
   ngiiRepresentativeLinkFeatures: [],
   ngiiReviewLinkFeatures: [],
 };
-document.body.dataset.dashboardVersion = "20260728-3";
+document.body.dataset.dashboardVersion = "20260728-4";
 
 const dashboardConfig = window.SAFETYZONE_CONFIG || {};
 const queryParams = new URLSearchParams(window.location.search);
@@ -1878,8 +1878,11 @@ function renderChangeSummaryBySido() {
 function renderChangeSummaryBySido() {
   const target = document.getElementById("change-region-summary");
   if (!target || !state.changeSummaryBySido) return;
-  const regions = state.changeSummaryBySido.regions || [];
-  const exclusionRules = state.changeExclusions?.rules || [];
+  const regions = buildFilteredChangeSummaryBySido();
+  const selectedDate = selectedEventDate();
+  const exclusionRules = (state.changeExclusions?.rules || []).filter(
+    (rule) => !selectedDate || rule.detected_date === selectedDate,
+  );
   if (!regions.length && !exclusionRules.length) {
     target.textContent = t("noChangesAfterBaseline");
     return;
@@ -1895,6 +1898,42 @@ function renderChangeSummaryBySido() {
       )}`;
       return item;
     }),
+  );
+}
+
+function changeSummaryRegionName(code) {
+  const summaryRegion = (state.changeSummaryBySido?.regions || []).find(
+    (region) => region.sido_code === code,
+  );
+  const currentRegion = (state.currentIndex?.regions || []).find((region) => region.sido_code === code);
+  return summaryRegion?.sido_name || currentRegion?.sido_name || code;
+}
+
+function buildFilteredChangeSummaryBySido() {
+  const summary = new Map();
+  state.events.filter(eventMatchesDateAndType).forEach((event) => {
+    const code = String(event.sgg_code || "").slice(0, 2) || "unknown";
+    if (!summary.has(code)) {
+      summary.set(code, {
+        sido_code: code,
+        sido_name: changeSummaryRegionName(code),
+        total: 0,
+        new: 0,
+        changed: 0,
+        deleted_or_review: 0,
+      });
+    }
+    const region = summary.get(code);
+    region.total += 1;
+    if (event.change_type === "NEW") region.new += 1;
+    else if (event.change_type === "DELETED" || event.change_type === "MISSING") {
+      region.deleted_or_review += 1;
+    } else {
+      region.changed += 1;
+    }
+  });
+  return [...summary.values()].sort((left, right) =>
+    String(left.sido_code).localeCompare(String(right.sido_code)),
   );
 }
 
@@ -2310,6 +2349,7 @@ function renderFilteredChangeLayers() {
 
 function applyEventFilters() {
   renderEvents();
+  renderChangeSummaryBySido();
   renderFilteredChangeLayers();
 }
 
