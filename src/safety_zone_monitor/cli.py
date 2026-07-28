@@ -39,6 +39,10 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Load data into current/snapshots without creating change events or notifications",
     )
+    run_command.add_argument(
+        "--summary-json",
+        help="Optional path to write a machine-readable run summary JSON",
+    )
     subparsers.add_parser(
         "quality-report", help="Read-only quality checks for current safety-zone data"
     )
@@ -232,6 +236,40 @@ def main() -> None:
         return
 
     summary = run_pipeline(settings, record_events=not args.baseline)
+    summary_payload = {
+        "run_id": str(summary.run_id),
+        "fetched_count": summary.fetched_count,
+        "polygon_count": summary.polygon_count,
+        "facility_point_count": summary.facility_point_count,
+        "polygon_change_count": len(summary.diff.changes),
+        "point_change_count": summary.point_change_count,
+        "change_count": summary.change_count,
+        "has_changes": summary.has_changes,
+        "polygon_changes": {
+            "new": summary.diff.count(ChangeType.NEW),
+            "geometry_changed": summary.diff.count(ChangeType.GEOMETRY_CHANGED),
+            "attribute_changed": summary.diff.count(ChangeType.ATTRIBUTE_CHANGED),
+            "geometry_attribute_changed": summary.diff.count(ChangeType.GEOMETRY_ATTRIBUTE_CHANGED),
+            "unchanged": summary.diff.count(ChangeType.UNCHANGED),
+            "deleted": summary.diff.count(ChangeType.DELETED),
+        },
+        "point_changes": {
+            "new": summary.point_diff.count(PointChangeType.NEW),
+            "point_changed": summary.point_diff.count(PointChangeType.POINT_CHANGED),
+            "attribute_changed": summary.point_diff.count(PointChangeType.ATTRIBUTE_CHANGED),
+            "point_attribute_changed": summary.point_diff.count(
+                PointChangeType.POINT_ATTRIBUTE_CHANGED
+            ),
+            "unchanged": summary.point_diff.count(PointChangeType.UNCHANGED),
+            "deleted": summary.point_diff.count(PointChangeType.DELETED),
+            "missing": summary.point_diff.count(PointChangeType.MISSING),
+        },
+    }
+    if args.summary_json:
+        Path(args.summary_json).write_text(
+            json.dumps(summary_payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
     print(
         "Run complete: "
         f"NEW={summary.diff.count(ChangeType.NEW)} "

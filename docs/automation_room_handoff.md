@@ -187,6 +187,12 @@ Nationwide dashboard split update:
 - Recent change events remain nationwide through `change_events.json`, `change_zones.geojson`, and `change_points.geojson`.
 - `dashboard/data/change_summary_by_sido.json` provides per-sido counts for nationwide recent changes.
 
+Change-triggered dashboard update:
+
+- `daily-monitor.yml` runs at 09:00 KST and writes `run_summary.json` from `python -m safety_zone_monitor run --summary-json run_summary.json`.
+- The workflow runs `export-dashboard` and commits `dashboard/data` only when `has_changes=true`.
+- No-change runs still update DB run history, but GitHub Pages keeps the previous static dashboard files.
+
 Language view update:
 
 - Dashboard supports a `KR / EN` view toggle.

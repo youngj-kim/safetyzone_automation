@@ -75,6 +75,11 @@ export하고, 변경된 `dashboard/data/*.json`, `dashboard/data/current_zones/*
 현재 객체는 전국 단일 GeoJSON으로 배포하지 않고 시도 단위로 로드한다. 최근 변경 이벤트는
 전국 단위 파일을 유지하고, 시도별 변경 건수는 별도 요약 JSON으로 표시한다.
 
+일일 자동화에서는 변경 감지 결과가 있을 때만 대시보드 정적 데이터를 갱신한다. `run` 명령은
+`run_summary.json`을 만들고, workflow는 `has_changes=true`일 때만 `export-dashboard`를 실행한 뒤
+`dashboard/data`를 커밋/푸시한다. 변경이 없는 날에는 DB의 실행 이력은 남지만 GitHub Pages의
+대시보드 파일은 갱신하지 않는다.
+
 ## API 오류 유형
 
 API 호출 실패는 `ApiError` 메시지 앞에 유형을 붙여 기록한다. 대시보드의 모니터링 이력과
