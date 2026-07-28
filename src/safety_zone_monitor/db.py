@@ -98,6 +98,54 @@ def empty_feature_collection() -> dict[str, Any]:
     return {"type": "FeatureCollection", "features": []}
 
 
+DASHBOARD_CHANGE_FIELD_LABELS = {
+    "source_manage_no": "관리번호",
+    "project_no": "사업번호",
+    "facility_name": "시설명",
+    "facility_type_code": "시설유형",
+    "facility_detail_type_code": "시설세부유형",
+    "representative_manage_no": "대표관리번호",
+    "use_yn": "사용여부",
+    "sgg_code": "시군구",
+    "emdong_code": "읍면동",
+    "stdg_code": "법정동",
+    "assign_type": "지정유형",
+    "road_address": "도로명주소",
+    "road_detail_address": "도로명상세주소",
+    "lot_address": "지번주소",
+    "lot_detail_address": "지번상세주소",
+    "first_registered_on": "최초등록일",
+    "last_modified_on": "최종수정일",
+}
+
+
+def dashboard_changed_fields(
+    old_snapshot: dict[str, Any] | str | None,
+    new_snapshot: dict[str, Any] | str | None,
+) -> list[dict[str, str | None]]:
+    if isinstance(old_snapshot, str):
+        old_snapshot = json.loads(old_snapshot)
+    if isinstance(new_snapshot, str):
+        new_snapshot = json.loads(new_snapshot)
+    if not old_snapshot or not new_snapshot:
+        return []
+
+    changes = []
+    for field, label in DASHBOARD_CHANGE_FIELD_LABELS.items():
+        old_value = old_snapshot.get(field)
+        new_value = new_snapshot.get(field)
+        if old_value != new_value:
+            changes.append(
+                {
+                    "field": field,
+                    "label": label,
+                    "old": None if old_value is None else str(old_value),
+                    "new": None if new_value is None else str(new_value),
+                }
+            )
+    return changes
+
+
 def group_feature_collection_by_sido(
     geojson: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
@@ -1222,6 +1270,8 @@ class Repository:
                         old_snapshot ->> 'facility_type_code'
                     )
                         AS facility_type_code,
+                    old_snapshot,
+                    new_snapshot,
                     detected_at
                 FROM analysis.zone_change_event
                 WHERE (
@@ -1280,6 +1330,8 @@ class Repository:
                         old_snapshot ->> 'facility_type_code'
                     )
                         AS facility_type_code,
+                    old_snapshot,
+                    new_snapshot,
                     detected_at
                 FROM analysis.zone_facility_point_change_event
                 WHERE (
@@ -1310,7 +1362,7 @@ class Repository:
 
         rows = sorted(
             [*polygon_rows, *point_rows],
-            key=lambda row: row[11],
+            key=lambda row: row[13],
             reverse=True,
         )[:limit]
         payload = {
@@ -1327,7 +1379,8 @@ class Repository:
                     "api_first_registered_on": row[8],
                     "api_last_modified_on": row[9],
                     "facility_type_code": row[10],
-                    "detected_at": row[11].isoformat() if row[11] else None,
+                    "changed_fields": dashboard_changed_fields(row[11], row[12]),
+                    "detected_at": row[13].isoformat() if row[13] else None,
                 }
                 for row in rows
             ]
@@ -1376,6 +1429,8 @@ class Repository:
                         old_snapshot ->> 'facility_type_code'
                     )
                         AS facility_type_code,
+                    old_snapshot,
+                    new_snapshot,
                     detected_at
                 FROM analysis.zone_change_event
                 WHERE (
@@ -1434,6 +1489,8 @@ class Repository:
                         old_snapshot ->> 'facility_type_code'
                     )
                         AS facility_type_code,
+                    old_snapshot,
+                    new_snapshot,
                     detected_at
                 FROM analysis.zone_facility_point_change_event
                 WHERE (
@@ -1489,7 +1546,7 @@ class Repository:
             connection.rollback()
 
         grouped: dict[str, dict[str, Any]] = {}
-        rows = sorted([*polygon_rows, *point_rows], key=lambda row: row[11], reverse=True)
+        rows = sorted([*polygon_rows, *point_rows], key=lambda row: row[13], reverse=True)
         for row in rows:
             layer_type = row[0]
             source_manage_no = row[5]
@@ -1508,7 +1565,8 @@ class Repository:
                 "api_first_registered_on": row[8],
                 "api_last_modified_on": row[9],
                 "facility_type_code": row[10],
-                "detected_at": row[11].isoformat() if row[11] else None,
+                "changed_fields": dashboard_changed_fields(row[11], row[12]),
+                "detected_at": row[13].isoformat() if row[13] else None,
             }
             if entity_key not in grouped:
                 grouped[entity_key] = {
@@ -1744,6 +1802,8 @@ class Repository:
                         e.old_snapshot ->> 'facility_type_code'
                     )
                         AS facility_type_code,
+                    e.old_snapshot,
+                    e.new_snapshot,
                     e.detected_at,
                     ST_AsGeoJSON(ST_Transform(g.geom, 4326)) AS geometry
                 FROM analysis.zone_change_event AS e
@@ -1801,9 +1861,10 @@ class Repository:
                         "api_first_registered_on": row[8],
                         "api_last_modified_on": row[9],
                         "facility_type_code": row[10],
-                        "detected_at": row[11].isoformat() if row[11] else None,
+                        "changed_fields": dashboard_changed_fields(row[11], row[12]),
+                        "detected_at": row[13].isoformat() if row[13] else None,
                     },
-                    "geometry": json.loads(row[12]),
+                    "geometry": json.loads(row[14]),
                 }
                 for row in rows
             ],
@@ -1851,6 +1912,8 @@ class Repository:
                         e.old_snapshot ->> 'facility_type_code'
                     )
                         AS facility_type_code,
+                    e.old_snapshot,
+                    e.new_snapshot,
                     e.detected_at,
                     ST_AsGeoJSON(ST_Transform(g.geom, 4326)) AS geometry
                 FROM analysis.zone_facility_point_change_event AS e
@@ -1910,9 +1973,10 @@ class Repository:
                         "api_first_registered_on": row[9],
                         "api_last_modified_on": row[10],
                         "facility_type_code": row[11],
-                        "detected_at": row[12].isoformat() if row[12] else None,
+                        "changed_fields": dashboard_changed_fields(row[12], row[13]),
+                        "detected_at": row[14].isoformat() if row[14] else None,
                     },
-                    "geometry": json.loads(row[13]),
+                    "geometry": json.loads(row[15]),
                 }
                 for row in rows
             ],

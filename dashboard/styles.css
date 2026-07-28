@@ -684,6 +684,13 @@ input[type="checkbox"] {
   background: var(--zone-type-color, var(--gray));
 }
 
+.changed-fields {
+  display: inline-block;
+  margin-top: 3px;
+  color: var(--text);
+  font-weight: 700;
+}
+
 .popup-timeline {
   margin: 8px 0;
   padding: 8px 0 0;

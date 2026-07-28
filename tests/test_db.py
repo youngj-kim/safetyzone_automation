@@ -4,6 +4,7 @@ from safety_zone_monitor.db import (
     current_region_index,
     current_search_index_by_sido,
     dashboard_change_exclusion_policies,
+    dashboard_changed_fields,
     group_feature_collection_by_sido,
     sanitize_error_message,
 )
@@ -117,6 +118,26 @@ def test_change_summary_by_sido_groups_change_categories() -> None:
     assert [(region["sido_code"], region["total"]) for region in summary["regions"]] == [
         ("11", 2),
         ("41", 1),
+    ]
+
+
+def test_dashboard_changed_fields_lists_only_changed_attributes() -> None:
+    changes = dashboard_changed_fields(
+        {
+            "facility_name": "Old School",
+            "project_no": "P-1",
+            "last_modified_on": None,
+        },
+        {
+            "facility_name": "Old School",
+            "project_no": "P-2",
+            "last_modified_on": "2026-07-28",
+        },
+    )
+
+    assert changes == [
+        {"field": "project_no", "label": "사업번호", "old": "P-1", "new": "P-2"},
+        {"field": "last_modified_on", "label": "최종수정일", "old": None, "new": "2026-07-28"},
     ]
 
 

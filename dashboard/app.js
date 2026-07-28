@@ -71,7 +71,7 @@ const state = {
   ngiiRepresentativeLinkFeatures: [],
   ngiiReviewLinkFeatures: [],
 };
-document.body.dataset.dashboardVersion = "20260728-5";
+document.body.dataset.dashboardVersion = "20260728-6";
 
 const dashboardConfig = window.SAFETYZONE_CONFIG || {};
 const queryParams = new URLSearchParams(window.location.search);
@@ -210,6 +210,26 @@ const SIDO_NAME_EN = {
   "50": "Jeju",
   "51": "Gangwon State",
   "52": "Jeonbuk State",
+};
+
+const CHANGE_FIELD_LABEL_EN = {
+  source_manage_no: "Management No.",
+  project_no: "Project No.",
+  facility_name: "Facility Name",
+  facility_type_code: "Facility Type",
+  facility_detail_type_code: "Facility Detail Type",
+  representative_manage_no: "Representative No.",
+  use_yn: "Use Y/N",
+  sgg_code: "District Code",
+  emdong_code: "Town Code",
+  stdg_code: "Legal-dong Code",
+  assign_type: "Designation Type",
+  road_address: "Road Address",
+  road_detail_address: "Road Detail Address",
+  lot_address: "Lot Address",
+  lot_detail_address: "Lot Detail Address",
+  first_registered_on: "First Registered",
+  last_modified_on: "Last Modified",
 };
 
 const FACILITY_SUFFIX_RULES = [
@@ -585,6 +605,39 @@ function featureProperties(feature) {
     ...(feature.properties || {}),
     event_id: feature.properties?.event_id ?? feature.id,
   };
+}
+
+function changedFieldLabel(change) {
+  if (state.language === "en") {
+    return CHANGE_FIELD_LABEL_EN[change.field] || change.field || change.label || "";
+  }
+  return change.label || change.field || "";
+}
+
+function changedFieldValue(value) {
+  if (value === null || value === undefined || value === "") {
+    return state.language === "en" ? "None" : "없음";
+  }
+  return String(value);
+}
+
+function changedFieldsSummary(props, limit = 3) {
+  const fields = props.changed_fields || [];
+  if (!fields.length) return "";
+  const visible = fields.slice(0, limit).map((change) => {
+    return `${changedFieldLabel(change)}: ${changedFieldValue(change.old)} → ${changedFieldValue(change.new)}`;
+  });
+  if (fields.length > limit) {
+    visible.push(state.language === "en" ? `+${fields.length - limit} more` : `외 ${fields.length - limit}건`);
+  }
+  return visible.join(" · ");
+}
+
+function changedFieldsHtml(props, limit = 4) {
+  const summary = changedFieldsSummary(props, limit);
+  if (!summary) return "";
+  const label = state.language === "en" ? "Changed Fields" : "변경 항목";
+  return `<span class="changed-fields"><b>${label}</b>: ${escapeHtml(summary)}</span><br>`;
 }
 
 function eventKey(props) {
@@ -1459,6 +1512,7 @@ function popupContent(props) {
   const review = enriched.review_reason
     ? `${t("reviewLabel")}: ${escapeHtml(enriched.review_reason)}<br>`
     : "";
+  const changedFields = changedFieldsHtml(props);
   const zoneType = zoneTypeInfo(props.facility_type_code);
   const apiDates =
     props.api_first_registered_on || props.api_last_modified_on
@@ -1474,6 +1528,7 @@ function popupContent(props) {
     ${t("sgg")}: ${props.sgg_code || "-"}<br>
     ${t("group")}: ${props.zone_group_id || "-"}<br>
     ${apiDates}
+    ${changedFields}
     ${review}
     ${popupTimelineContent(props)}
     ${props.detected_at ? `${t("detected")}: ${formatDate(props.detected_at)}<br>` : ""}
@@ -2111,6 +2166,7 @@ function renderEvents() {
       const enriched = enrichReviewProperties(event);
       const zoneType = zoneTypeInfo(event.facility_type_code);
       const names = facilityNameParts(event);
+      const fieldSummary = changedFieldsSummary(event);
       const item = document.createElement("li");
       item.className = "event-item";
       item.tabIndex = 0;
@@ -2135,6 +2191,7 @@ function renderEvents() {
               ? `<span>${t("apiLast")} ${formatApiDate(event.api_last_modified_on)}</span><br>`
               : ""
           }
+          ${fieldSummary ? `<span class="changed-fields">${escapeHtml(fieldSummary)}</span><br>` : ""}
           ${formatDate(event.detected_at)}
         </div>
       `;
