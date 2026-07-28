@@ -72,7 +72,7 @@ const state = {
   ngiiReviewLinkFeatures: [],
   selectedChangeSido: "",
 };
-document.body.dataset.dashboardVersion = "20260728-9";
+document.body.dataset.dashboardVersion = "20260728-10";
 
 const dashboardConfig = window.SAFETYZONE_CONFIG || {};
 const queryParams = new URLSearchParams(window.location.search);
@@ -2198,6 +2198,41 @@ function eventMatchesActiveEventFilters(event) {
   );
 }
 
+function changeExtractFilename(layerType) {
+  const parts = [
+    "safetyzone_changes",
+    layerType.toLowerCase(),
+    selectedEventDate() || "all_dates",
+    selectedEventType() || "all_types",
+    state.selectedChangeSido || "all_sido",
+  ];
+  return `${parts.join("_")}.geojson`;
+}
+
+function downloadGeojson(filename, geojson) {
+  const blob = new Blob([JSON.stringify(geojson, null, 2)], {
+    type: "application/geo+json;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function downloadFilteredChangeGeojson(layerType) {
+  const features = state.changeFeatures
+    .filter((feature) => feature.properties?.layer_type === layerType)
+    .filter((feature) => eventMatchesActiveEventFilters(feature.properties || {}));
+  downloadGeojson(changeExtractFilename(layerType), {
+    type: "FeatureCollection",
+    features,
+  });
+}
+
 function renderEventDateOptions() {
   const select = document.getElementById("event-date");
   if (!select) return;
@@ -2858,6 +2893,12 @@ async function main() {
   document.getElementById("event-search").addEventListener("input", renderEvents);
   document.getElementById("event-type").addEventListener("change", applyEventFilters);
   document.getElementById("event-date").addEventListener("change", applyEventFilters);
+  document
+    .getElementById("download-change-polygons")
+    .addEventListener("click", () => downloadFilteredChangeGeojson("Polygon"));
+  document
+    .getElementById("download-change-points")
+    .addEventListener("click", () => downloadFilteredChangeGeojson("Point"));
   document.getElementById("current-search").addEventListener("input", () => {
     void handleCurrentSearchInput();
   });

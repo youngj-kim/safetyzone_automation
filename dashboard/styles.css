@@ -457,6 +457,30 @@ input[type="checkbox"] {
   gap: 8px;
 }
 
+.download-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.download-actions button {
+  min-height: 34px;
+  border: 1px solid #c8d7cd;
+  border-radius: 8px;
+  color: var(--text);
+  background: #f7fbf8;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.download-actions button:hover,
+.download-actions button:focus-visible {
+  border-color: var(--green);
+  background: #eef7f1;
+}
+
 .region-summary {
   display: flex;
   flex-wrap: wrap;
