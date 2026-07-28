@@ -70,7 +70,7 @@ const state = {
   ngiiRepresentativeLinkFeatures: [],
   ngiiReviewLinkFeatures: [],
 };
-document.body.dataset.dashboardVersion = "20260728-1";
+document.body.dataset.dashboardVersion = "20260728-2";
 
 const dashboardConfig = window.SAFETYZONE_CONFIG || {};
 const queryParams = new URLSearchParams(window.location.search);
@@ -641,6 +641,37 @@ function popupTimelineContent(props) {
       ${recentEvents ? `<ol>${recentEvents}</ol>` : ""}
     </div>
   `;
+}
+
+function renderSelectionHistory(props) {
+  const panel = document.getElementById("selection-history");
+  const title = document.getElementById("selection-history-title");
+  const summary = document.getElementById("selection-history-summary");
+  const list = document.getElementById("selection-history-list");
+  if (!panel || !title || !summary || !list) return;
+
+  const timeline = timelineForProps(props);
+  const names = facilityNameParts(props);
+  title.textContent = `${names.primary} 변경 이력`;
+  summary.textContent = timeline
+    ? timelineSummary(timeline)
+    : `${props.layer_type || "객체"} · ${props.source_manage_no || props.zone_group_id || "-"}`;
+
+  const events = (timeline?.events || []).slice(0, 8);
+  const items = events.map((event) => {
+    const item = document.createElement("li");
+    item.textContent = `${formatDate(event.detected_at)} · ${event.layer_type} · ${changeTypeLabel(
+      event.change_type,
+    )}`;
+    return item;
+  });
+  if (!items.length && props.api_last_modified_on) {
+    const item = document.createElement("li");
+    item.textContent = `${t("apiLast")} ${formatApiDate(props.api_last_modified_on)}`;
+    items.push(item);
+  }
+  list.replaceChildren(...items);
+  panel.hidden = false;
 }
 
 function statusHintLabel(status) {
@@ -1349,6 +1380,7 @@ function focusEvent(event) {
     isValid: Boolean(bounds?.isValid()),
   };
   document.body.dataset.lastFocus = JSON.stringify(window.dashboardLastFocus);
+  renderSelectionHistory(event);
   if (!bounds?.isValid()) return;
   collapsePanelForMapFocus();
   const center = bounds.getCenter();
@@ -1389,6 +1421,7 @@ function focusCurrentItem(item) {
     isValid: Boolean(bounds?.isValid()),
   };
   document.body.dataset.lastFocus = JSON.stringify(window.dashboardLastFocus);
+  renderSelectionHistory(item);
   if (!bounds?.isValid()) return;
   collapsePanelForMapFocus();
   const center = bounds.getCenter();
@@ -1888,7 +1921,6 @@ function renderEvents() {
   eventList.replaceChildren(
     ...filtered.slice(0, 120).map((event) => {
       const enriched = enrichReviewProperties(event);
-      const timelineText = timelineSummary(timelineForProps(event));
       const zoneType = zoneTypeInfo(event.facility_type_code);
       const item = document.createElement("li");
       item.className = "event-item";
@@ -1913,7 +1945,6 @@ function renderEvents() {
               ? `<span>API 최종수정 ${formatApiDate(event.api_last_modified_on)}</span><br>`
               : ""
           }
-          ${timelineText ? `<span class="timeline-summary">${timelineText}</span><br>` : ""}
           ${formatDate(event.detected_at)}
         </div>
       `;
@@ -2030,7 +2061,6 @@ function renderEvents() {
   eventList.replaceChildren(
     ...filtered.slice(0, 120).map((event) => {
       const enriched = enrichReviewProperties(event);
-      const timelineText = timelineSummary(timelineForProps(event));
       const zoneType = zoneTypeInfo(event.facility_type_code);
       const names = facilityNameParts(event);
       const item = document.createElement("li");
@@ -2057,7 +2087,6 @@ function renderEvents() {
               ? `<span>${t("apiLast")} ${formatApiDate(event.api_last_modified_on)}</span><br>`
               : ""
           }
-          ${timelineText ? `<span class="timeline-summary">${timelineText}</span><br>` : ""}
           ${formatDate(event.detected_at)}
         </div>
       `;
@@ -2493,15 +2522,14 @@ function addNgiiLayers(zoneGeojson, representativeLinkGeojson, reviewLinkGeojson
 
 function bindLayerToggles() {
   document.querySelectorAll("[data-layer]").forEach((input) => {
-    input.addEventListener("change", () => {
+    const applyLayerState = () => {
       const group = layerGroups[input.dataset.layer];
-      if (input.checked) {
-        group.addTo(map);
-      } else {
-        group.removeFrom(map);
-      }
+      if (input.checked) group.addTo(map);
+      else group.removeFrom(map);
       setKakaoOverlayVisibility();
-    });
+    };
+    input.addEventListener("change", applyLayerState);
+    applyLayerState();
   });
 }
 

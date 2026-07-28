@@ -195,6 +195,13 @@ Change-triggered dashboard update:
 - The 2026-07-28 Incheon `NEW` surge for `28125`, `28155`, `28275`, and `28290` is treated as an administrative-district reorganization adjustment, not ordinary new safety-zone creation.
 - Dashboard export excludes those `NEW` events from recent-change lists and sido new counts, while preserving the source DB events and writing the reason to `dashboard/data/change_exclusions.json`.
 
+Dashboard panel cleanup:
+
+- The large layer checkbox block was moved into a collapsible `지도 레이어` drawer.
+- Safety-zone, change-state, and NGII review layers are grouped separately; NGII status/link/review-road overlays are off by default.
+- Event cards no longer carry inline timeline text. Selecting an event/current object opens a separate selected-object history panel backed by `timelines.json`.
+- The sido change summary is height-limited so the recent-change list starts higher in the panel.
+
 Language view update:
 
 - Dashboard supports a `KR / EN` view toggle.

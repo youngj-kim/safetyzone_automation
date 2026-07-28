@@ -310,22 +310,63 @@ body {
   font-size: 24px;
 }
 
+.layer-drawer {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfa;
+}
+
+.layer-drawer summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 38px;
+  padding: 8px 11px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.layer-drawer summary small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .toolbar {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 10px;
+  padding: 0 10px 10px;
+}
+
+.layer-group {
+  display: grid;
+  gap: 6px;
+}
+
+.layer-group strong {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.layer-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .toolbar label {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 36px;
-  padding: 8px 10px;
+  min-height: 30px;
+  padding: 5px 8px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  font-size: 13px;
-  background: #fbfcfa;
+  border-radius: 999px;
+  font-size: 12px;
+  background: #fff;
 }
 
 input,
@@ -349,7 +390,7 @@ input[type="checkbox"] {
 
 .activity-shell {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   min-height: 0;
   flex: 1 1 auto;
   gap: 10px;
@@ -420,6 +461,44 @@ input[type="checkbox"] {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  max-height: 54px;
+  overflow: auto;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.selection-history {
+  display: grid;
+  gap: 8px;
+  max-height: 150px;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid #c8d7cd;
+  border-radius: 8px;
+  background: #f7fbf8;
+}
+
+.selection-history[hidden] {
+  display: none;
+}
+
+.selection-history strong {
+  display: block;
+  font-size: 13px;
+}
+
+.selection-history p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.selection-history ol {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.35;
@@ -964,11 +1043,10 @@ input[type="checkbox"] {
     font-size: 21px;
   }
 
-  .toolbar {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .toolbar label {
+    min-height: 30px;
   }
 
-  .toolbar label,
   .activity-tab {
     min-height: 36px;
   }
