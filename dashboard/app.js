@@ -29,6 +29,7 @@ const layerGroups = {
 
 const state = {
   events: [],
+  changeFeatures: [],
   eventLayers: new Map(),
   eventFeatures: new Map(),
   currentItems: [],
@@ -70,7 +71,7 @@ const state = {
   ngiiRepresentativeLinkFeatures: [],
   ngiiReviewLinkFeatures: [],
 };
-document.body.dataset.dashboardVersion = "20260728-2";
+document.body.dataset.dashboardVersion = "20260728-3";
 
 const dashboardConfig = window.SAFETYZONE_CONFIG || {};
 const queryParams = new URLSearchParams(window.location.search);
@@ -2048,12 +2049,40 @@ function searchableText(item) {
     .toLowerCase();
 }
 
+function eventDetectedDate(event) {
+  return (event.detected_at || "").slice(0, 10);
+}
+
+function selectedEventDate() {
+  return document.getElementById("event-date")?.value || "";
+}
+
+function selectedEventType() {
+  return document.getElementById("event-type")?.value || "";
+}
+
+function eventMatchesDateAndType(event) {
+  const type = selectedEventType();
+  const date = selectedEventDate();
+  return (!type || event.change_type === type) && (!date || eventDetectedDate(event) === date);
+}
+
+function renderEventDateOptions() {
+  const select = document.getElementById("event-date");
+  if (!select) return;
+  const currentValue = select.value;
+  const dates = [...new Set(state.events.map(eventDetectedDate).filter(Boolean))].sort().reverse();
+  select.replaceChildren(
+    new Option("전체 발생일", ""),
+    ...dates.map((date) => new Option(date, date)),
+  );
+  select.value = dates.includes(currentValue) ? currentValue : "";
+}
+
 function renderEvents() {
   const query = document.getElementById("event-search").value.trim().toLowerCase();
-  const type = document.getElementById("event-type").value;
   const filtered = state.events.filter((event) => {
-    const matchesType = !type || event.change_type === type;
-    return matchesType && (!query || searchableText(event).includes(query));
+    return eventMatchesDateAndType(event) && (!query || searchableText(event).includes(query));
   });
 
   document.getElementById("event-total").textContent = countText(filtered.length);
@@ -2229,6 +2258,7 @@ function addChangeLayer(geojson) {
   const layers = [];
   (geojson.features || []).forEach((feature) => {
     feature.properties = featureProperties(feature);
+    if (!eventMatchesDateAndType(feature.properties)) return;
     const category = changeCategory(feature.properties?.change_type);
     const layer = L.geoJSON(feature, {
       style: (item) => ({
@@ -2257,6 +2287,30 @@ function addChangeLayer(geojson) {
     layers.push(layer);
   });
   return layers;
+}
+
+function renderFilteredChangeLayers() {
+  for (const key of ["new", "changed", "review"]) {
+    layerGroups[key].clearLayers();
+  }
+  state.eventLayers.clear();
+  state.eventFeatures.clear();
+  removeKakaoOverlays(["new", "changed", "review"]);
+  state.kakao.changeOverlaysBuilt = false;
+
+  addChangeLayer({ type: "FeatureCollection", features: state.changeFeatures });
+  state.changeFeatures.forEach((feature) => {
+    if (eventMatchesDateAndType(feature.properties || {})) {
+      state.eventFeatures.set(eventKey(feature.properties), feature);
+    }
+  });
+  buildKakaoChangeOverlays();
+  setKakaoOverlayVisibility();
+}
+
+function applyEventFilters() {
+  renderEvents();
+  renderFilteredChangeLayers();
 }
 
 function ngiiBucketInfo(bucket) {
@@ -2665,7 +2719,8 @@ async function main() {
   bindRoadviewResize();
   bindLanguageToggle();
   document.getElementById("event-search").addEventListener("input", renderEvents);
-  document.getElementById("event-type").addEventListener("change", renderEvents);
+  document.getElementById("event-type").addEventListener("change", applyEventFilters);
+  document.getElementById("event-date").addEventListener("change", applyEventFilters);
   document.getElementById("current-search").addEventListener("input", () => {
     void handleCurrentSearchInput();
   });
@@ -2715,11 +2770,14 @@ async function main() {
   state.timelines = new Map(
     (timelines.timelines || []).map((timeline) => [timeline.entity_key, timeline]),
   );
-  state.eventFeatures = new Map(
-    [...(changeZones.features || []), ...(changePoints.features || [])].map((feature) => {
+  state.changeFeatures = [...(changeZones.features || []), ...(changePoints.features || [])].map(
+    (feature) => {
       feature.properties = featureProperties(feature);
-      return [eventKey(feature.properties), feature];
-    }),
+      return feature;
+    },
+  );
+  state.eventFeatures = new Map(
+    state.changeFeatures.map((feature) => [eventKey(feature.properties), feature]),
   );
   state.polygonDeletedManageNos = new Set(
     (changeZones.features || [])
@@ -2727,8 +2785,8 @@ async function main() {
       .map((feature) => feature.properties?.source_manage_no)
       .filter(Boolean),
   );
-  addChangeLayer(changeZones);
-  addChangeLayer(changePoints);
+  renderEventDateOptions();
+  renderFilteredChangeLayers();
   addNgiiLayers(ngiiZones, ngiiRepresentativeLinks, ngiiReviewLinks);
   buildKakaoChangeOverlays();
   await loadCurrentRegion(state.selectedSido);

@@ -201,6 +201,7 @@ Dashboard panel cleanup:
 - Safety-zone, change-state, and NGII review layers are grouped separately; NGII status/link/review-road overlays are off by default.
 - Event cards no longer carry inline timeline text. Selecting an event/current object opens a separate selected-object history panel backed by `timelines.json`.
 - The sido change summary is height-limited so the recent-change list starts higher in the panel.
+- Recent changes can be filtered by detected date; the event list and map change overlays are synchronized to the selected date and change type.
 
 Language view update:
 
