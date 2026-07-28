@@ -435,6 +435,15 @@ input[type="checkbox"] {
   background: #fbfcfa;
 }
 
+.exclusion-note {
+  align-items: flex-start;
+  border-color: #f2c572;
+  border-radius: 6px;
+  background: #fff8eb;
+  color: #6b4f12;
+  white-space: normal;
+}
+
 .review-guide {
   margin: 0;
   padding: 9px 10px;

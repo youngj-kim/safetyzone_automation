@@ -80,6 +80,11 @@ export하고, 변경된 `dashboard/data/*.json`, `dashboard/data/current_zones/*
 `dashboard/data`를 커밋/푸시한다. 변경이 없는 날에는 DB의 실행 이력은 남지만 GitHub Pages의
 대시보드 파일은 갱신하지 않는다.
 
+2026-07-28에 감지된 인천 `28125`, `28155`, `28275`, `28290`의 대량 `NEW`는 2026-07-01
+인천 행정구역 개편에 따른 검단구 신설 및 서구 명칭 변경 반영분으로 본다. DB 원천 이벤트는
+보존하되, 대시보드 export에서는 일반 신규 보호구역 목록과 시도별 신규 카운트에서 제외하고
+`dashboard/data/change_exclusions.json`에 제외 사유를 남긴다.
+
 ## API 오류 유형
 
 API 호출 실패는 `ApiError` 메시지 앞에 유형을 붙여 기록한다. 대시보드의 모니터링 이력과

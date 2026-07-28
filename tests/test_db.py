@@ -3,6 +3,7 @@ from safety_zone_monitor.db import (
     classify_sgg_coverage,
     current_region_index,
     current_search_index_by_sido,
+    dashboard_change_exclusion_policies,
     group_feature_collection_by_sido,
     sanitize_error_message,
 )
@@ -117,3 +118,13 @@ def test_change_summary_by_sido_groups_change_categories() -> None:
         ("11", 2),
         ("41", 1),
     ]
+
+
+def test_dashboard_change_exclusion_policies_document_incheon_reorg() -> None:
+    policies = dashboard_change_exclusion_policies()
+
+    assert policies["rules"][0]["rule_id"] == "incheon-admin-reorg-20260701"
+    assert policies["rules"][0]["detected_date"] == "2026-07-28"
+    assert policies["rules"][0]["change_type"] == "NEW"
+    assert policies["rules"][0]["sgg_codes"] == ["28125", "28155", "28275", "28290"]
+    assert "행정구역 개편" in policies["rules"][0]["reason"]

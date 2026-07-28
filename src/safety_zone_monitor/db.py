@@ -23,6 +23,13 @@ from safety_zone_monitor.diff import (
 from safety_zone_monitor.normalize import FacilityPointRecord, ZoneRecord, clean_text, stable_hash
 
 DEFAULT_DASHBOARD_BASELINE_DATE = "2026-07-25"
+INCHEON_ADMIN_REORG_EXCLUSION_DATE = "2026-07-28"
+INCHEON_ADMIN_REORG_EXCLUSION_SGG_CODES = ("28125", "28155", "28275", "28290")
+INCHEON_ADMIN_REORG_EXCLUSION_REASON = (
+    "2026년 7월 1일 인천광역시 행정구역 개편에 따른 검단구 신설 및 서구 명칭 변경 "
+    "반영분입니다. 기준선 당시 해당 시군구 코드가 없어 대량 NEW로 감지되었으므로 "
+    "일반 신규 보호구역 변경 목록에서는 제외합니다."
+)
 DEFAULT_WORK_EXTRACT_CHANGE_TYPES = (
     "NEW",
     "GEOMETRY_CHANGED",
@@ -247,6 +254,21 @@ def change_summary_by_sido(change_events: dict[str, Any]) -> dict[str, Any]:
             "changed": sum(item["changed"] for item in regions),
             "deleted_or_review": sum(item["deleted_or_review"] for item in regions),
         },
+    }
+
+
+def dashboard_change_exclusion_policies() -> dict[str, Any]:
+    return {
+        "rules": [
+            {
+                "rule_id": "incheon-admin-reorg-20260701",
+                "label": "인천 행정구역 개편 보정",
+                "reason": INCHEON_ADMIN_REORG_EXCLUSION_REASON,
+                "detected_date": INCHEON_ADMIN_REORG_EXCLUSION_DATE,
+                "change_type": "NEW",
+                "sgg_codes": list(INCHEON_ADMIN_REORG_EXCLUSION_SGG_CODES),
+            }
+        ]
     }
 
 
@@ -1202,15 +1224,29 @@ class Repository:
                         AS facility_type_code,
                     detected_at
                 FROM analysis.zone_change_event
-                WHERE (%s::date IS NULL)
-                   OR NOT (
-                       change_type = 'NEW'
-                       AND (detected_at AT TIME ZONE 'Asia/Seoul')::date <= %s::date
-                   )
+                WHERE (
+                    (%s::date IS NULL)
+                    OR NOT (
+                        change_type = 'NEW'
+                        AND (detected_at AT TIME ZONE 'Asia/Seoul')::date <= %s::date
+                    )
+                )
+                  AND NOT (
+                      change_type = 'NEW'
+                      AND (detected_at AT TIME ZONE 'Asia/Seoul')::date = %s::date
+                      AND COALESCE(new_snapshot ->> 'sgg_code', old_snapshot ->> 'sgg_code')
+                          = ANY(%s)
+                  )
                 ORDER BY detected_at DESC
                 LIMIT %s
                 """,
-                (baseline_date, baseline_date, limit),
+                (
+                    baseline_date,
+                    baseline_date,
+                    INCHEON_ADMIN_REORG_EXCLUSION_DATE,
+                    list(INCHEON_ADMIN_REORG_EXCLUSION_SGG_CODES),
+                    limit,
+                ),
             ).fetchall()
             point_rows = connection.execute(
                 """
@@ -1246,15 +1282,29 @@ class Repository:
                         AS facility_type_code,
                     detected_at
                 FROM analysis.zone_facility_point_change_event
-                WHERE (%s::date IS NULL)
-                   OR NOT (
-                       change_type = 'NEW'
-                       AND (detected_at AT TIME ZONE 'Asia/Seoul')::date <= %s::date
-                   )
+                WHERE (
+                    (%s::date IS NULL)
+                    OR NOT (
+                        change_type = 'NEW'
+                        AND (detected_at AT TIME ZONE 'Asia/Seoul')::date <= %s::date
+                    )
+                )
+                  AND NOT (
+                      change_type = 'NEW'
+                      AND (detected_at AT TIME ZONE 'Asia/Seoul')::date = %s::date
+                      AND COALESCE(new_snapshot ->> 'sgg_code', old_snapshot ->> 'sgg_code')
+                          = ANY(%s)
+                  )
                 ORDER BY detected_at DESC
                 LIMIT %s
                 """,
-                (baseline_date, baseline_date, limit),
+                (
+                    baseline_date,
+                    baseline_date,
+                    INCHEON_ADMIN_REORG_EXCLUSION_DATE,
+                    list(INCHEON_ADMIN_REORG_EXCLUSION_SGG_CODES),
+                    limit,
+                ),
             ).fetchall()
             connection.rollback()
 
@@ -1263,7 +1313,7 @@ class Repository:
             key=lambda row: row[11],
             reverse=True,
         )[:limit]
-        return {
+        payload = {
             "events": [
                 {
                     "layer_type": row[0],
@@ -1282,6 +1332,8 @@ class Repository:
                 for row in rows
             ]
         }
+        payload.update(dashboard_change_exclusion_policies())
+        return payload
 
     def dashboard_timelines(
         self,
@@ -1326,15 +1378,29 @@ class Repository:
                         AS facility_type_code,
                     detected_at
                 FROM analysis.zone_change_event
-                WHERE (%s::date IS NULL)
-                   OR NOT (
-                       change_type = 'NEW'
-                       AND (detected_at AT TIME ZONE 'Asia/Seoul')::date <= %s::date
-                   )
+                WHERE (
+                    (%s::date IS NULL)
+                    OR NOT (
+                        change_type = 'NEW'
+                        AND (detected_at AT TIME ZONE 'Asia/Seoul')::date <= %s::date
+                    )
+                )
+                  AND NOT (
+                      change_type = 'NEW'
+                      AND (detected_at AT TIME ZONE 'Asia/Seoul')::date = %s::date
+                      AND COALESCE(new_snapshot ->> 'sgg_code', old_snapshot ->> 'sgg_code')
+                          = ANY(%s)
+                  )
                 ORDER BY detected_at DESC
                 LIMIT %s
                 """,
-                (baseline_date, baseline_date, limit),
+                (
+                    baseline_date,
+                    baseline_date,
+                    INCHEON_ADMIN_REORG_EXCLUSION_DATE,
+                    list(INCHEON_ADMIN_REORG_EXCLUSION_SGG_CODES),
+                    limit,
+                ),
             ).fetchall()
             point_rows = connection.execute(
                 """
@@ -1370,15 +1436,29 @@ class Repository:
                         AS facility_type_code,
                     detected_at
                 FROM analysis.zone_facility_point_change_event
-                WHERE (%s::date IS NULL)
-                   OR NOT (
-                       change_type = 'NEW'
-                       AND (detected_at AT TIME ZONE 'Asia/Seoul')::date <= %s::date
-                   )
+                WHERE (
+                    (%s::date IS NULL)
+                    OR NOT (
+                        change_type = 'NEW'
+                        AND (detected_at AT TIME ZONE 'Asia/Seoul')::date <= %s::date
+                    )
+                )
+                  AND NOT (
+                      change_type = 'NEW'
+                      AND (detected_at AT TIME ZONE 'Asia/Seoul')::date = %s::date
+                      AND COALESCE(new_snapshot ->> 'sgg_code', old_snapshot ->> 'sgg_code')
+                          = ANY(%s)
+                  )
                 ORDER BY detected_at DESC
                 LIMIT %s
                 """,
-                (baseline_date, baseline_date, limit),
+                (
+                    baseline_date,
+                    baseline_date,
+                    INCHEON_ADMIN_REORG_EXCLUSION_DATE,
+                    list(INCHEON_ADMIN_REORG_EXCLUSION_SGG_CODES),
+                    limit,
+                ),
             ).fetchall()
             has_absence_table = connection.execute(
                 "SELECT to_regclass('analysis.zone_facility_point_absence') IS NOT NULL"
@@ -1683,6 +1763,12 @@ class Repository:
                     )
                 )
                   AND (%s::text[] IS NULL OR e.change_type = ANY(%s))
+                  AND NOT (
+                      e.change_type = 'NEW'
+                      AND (e.detected_at AT TIME ZONE 'Asia/Seoul')::date = %s::date
+                      AND COALESCE(e.new_snapshot ->> 'sgg_code', e.old_snapshot ->> 'sgg_code')
+                          = ANY(%s)
+                  )
                 ORDER BY e.detected_at DESC
                 LIMIT %s
                 """,
@@ -1691,6 +1777,8 @@ class Repository:
                     baseline_date,
                     list(change_types) if change_types else None,
                     list(change_types) if change_types else None,
+                    INCHEON_ADMIN_REORG_EXCLUSION_DATE,
+                    list(INCHEON_ADMIN_REORG_EXCLUSION_SGG_CODES),
                     limit,
                 ),
             ).fetchall()
@@ -1783,6 +1871,12 @@ class Repository:
                     )
                 )
                   AND (%s::text[] IS NULL OR e.change_type = ANY(%s))
+                  AND NOT (
+                      e.change_type = 'NEW'
+                      AND (e.detected_at AT TIME ZONE 'Asia/Seoul')::date = %s::date
+                      AND COALESCE(e.new_snapshot ->> 'sgg_code', e.old_snapshot ->> 'sgg_code')
+                          = ANY(%s)
+                  )
                 ORDER BY e.detected_at DESC
                 LIMIT %s
                 """,
@@ -1791,6 +1885,8 @@ class Repository:
                     baseline_date,
                     list(change_types) if change_types else None,
                     list(change_types) if change_types else None,
+                    INCHEON_ADMIN_REORG_EXCLUSION_DATE,
+                    list(INCHEON_ADMIN_REORG_EXCLUSION_SGG_CODES),
                     limit,
                 ),
             ).fetchall()
@@ -1843,6 +1939,7 @@ class Repository:
         datasets = {
             "overview.json": self.dashboard_overview(),
             "change_events.json": change_events,
+            "change_exclusions.json": dashboard_change_exclusion_policies(),
             "current_index.json": current_region_index(zones_by_sido, points_by_sido),
             "change_summary_by_sido.json": change_summary_by_sido(change_events),
             "change_zones.geojson": self.dashboard_change_zones_geojson(

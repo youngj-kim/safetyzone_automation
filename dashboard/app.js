@@ -62,6 +62,7 @@ const state = {
   polygonDeletedManageNos: new Set(),
   currentGroups: new Map(),
   changeSummaryBySido: null,
+  changeExclusions: null,
   ngiiSummary: null,
   ngiiItems: [],
   ngiiLayers: new Map(),
@@ -69,7 +70,7 @@ const state = {
   ngiiRepresentativeLinkFeatures: [],
   ngiiReviewLinkFeatures: [],
 };
-document.body.dataset.dashboardVersion = "20260727-1";
+document.body.dataset.dashboardVersion = "20260728-1";
 
 const dashboardConfig = window.SAFETYZONE_CONFIG || {};
 const queryParams = new URLSearchParams(window.location.search);
@@ -1832,13 +1833,20 @@ function renderChangeSummaryBySido() {
       return item;
     }),
   );
+  for (const rule of exclusionRules) {
+    const item = document.createElement("span");
+    item.className = "region-chip exclusion-note";
+    item.textContent = `${rule.label}: ${rule.reason}`;
+    target.appendChild(item);
+  }
 }
 
 function renderChangeSummaryBySido() {
   const target = document.getElementById("change-region-summary");
   if (!target || !state.changeSummaryBySido) return;
   const regions = state.changeSummaryBySido.regions || [];
-  if (!regions.length) {
+  const exclusionRules = state.changeExclusions?.rules || [];
+  if (!regions.length && !exclusionRules.length) {
     target.textContent = t("noChangesAfterBaseline");
     return;
   }
@@ -2645,6 +2653,7 @@ async function main() {
     events,
     currentIndex,
     changeSummaryBySido,
+    changeExclusions,
     changeZones,
     changePoints,
     timelines,
@@ -2657,6 +2666,7 @@ async function main() {
     loadJson("data/change_events.json"),
     loadJson("data/current_index.json"),
     loadJson("data/change_summary_by_sido.json"),
+    loadJson("data/change_exclusions.json"),
     loadJson("data/change_zones.geojson"),
     loadJson("data/change_points.geojson"),
     loadJson("data/timelines.json"),
@@ -2670,6 +2680,7 @@ async function main() {
   state.events = events.events || [];
   state.currentIndex = currentIndex;
   state.changeSummaryBySido = changeSummaryBySido;
+  state.changeExclusions = changeExclusions;
   state.ngiiSummary = ngiiSummary;
   renderCurrentRegionSelect();
   renderChangeSummaryBySido();
