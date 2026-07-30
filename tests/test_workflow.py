@@ -12,8 +12,13 @@ def test_daily_workflow_uses_dispatch_and_quality_gate() -> None:
     assert "contents: write" in workflow
     assert "python -m safety_zone_monitor run --summary-json run_summary.json" in workflow
     assert "python -m safety_zone_monitor quality-report" in workflow
-    assert "steps.detected_changes.outputs.has_changes == 'true'" in workflow
+    assert "steps.detected_changes.outputs.has_changes == 'true'" not in workflow
+    assert "Check detected changes" in workflow
+    assert "always()" in workflow
+    assert "run_summary.json" in workflow
     assert "python -m safety_zone_monitor export-dashboard" in workflow
+    assert "steps.export_dashboard.outcome == 'success'" in workflow
+    assert "Update dashboard data after monitor run" in workflow
     assert "git add dashboard\\data" in workflow
     assert "actions/setup-python" not in workflow
     assert "python --version" in workflow
