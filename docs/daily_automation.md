@@ -75,11 +75,14 @@ export하고, 변경된 `dashboard/data/*.json`, `dashboard/data/current_zones/*
 현재 객체는 전국 단일 GeoJSON으로 배포하지 않고 시도 단위로 로드한다. 최근 변경 이벤트는
 전국 단위 파일을 유지하고, 시도별 변경 건수는 별도 요약 JSON으로 표시한다.
 
-일일 자동화에서는 모니터링 실행 후 변경 감지 결과가 없어도 대시보드 정적 데이터를 갱신한다.
-`run` 명령은 `run_summary.json`을 만들고, workflow는 변경 여부 확인값을 남긴 뒤
-`always()` 조건으로 `export-dashboard`를 실행한다. 이후 `dashboard/data`에 실제 diff가 있으면
-커밋/푸시한다. 따라서 변경이 없는 날은 물론, API 오류로 실패 이력이 DB에 기록된 날도 export가
-가능하면 GitHub Pages 대시보드의 모니터링 이력과 최신 실행 시각에 반영된다.
+일일 자동화에서는 변경 감지 결과가 있는 성공 실행에서만 변경 목록, 현재 객체, 지도 레이어용
+대시보드 정적 데이터를 갱신한다. `run` 명령은 `run_summary.json`을 만들고, workflow는
+`has_changes=true`일 때 전체 `dashboard/data`를 export한 뒤 커밋/푸시한다. 수집 실패나 품질
+검증 실패 시에는 변경 데이터와 현재 객체 데이터는 갱신하지 않는다.
+
+대신 대시보드의 `모니터링 이력`은 매번 상태를 확인할 수 있도록 별도로 관리한다. 변경이 없는
+성공 실행이나 실패 실행에서는 `dashboard/data/overview.json`만 export/commit해 GitHub Pages에
+성공/실패 이력과 실패 사유를 표시한다.
 
 2026-07-28에 감지된 인천 `28125`, `28155`, `28275`, `28290`의 대량 `NEW`는 2026-07-01
 인천 행정구역 개편에 따른 검단구 신설 및 서구 명칭 변경 반영분으로 본다. DB 원천 이벤트는

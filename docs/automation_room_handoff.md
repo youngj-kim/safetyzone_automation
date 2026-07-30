@@ -187,11 +187,12 @@ Nationwide dashboard split update:
 - Recent change events remain nationwide through `change_events.json`, `change_zones.geojson`, and `change_points.geojson`.
 - `dashboard/data/change_summary_by_sido.json` provides per-sido counts for nationwide recent changes.
 
-Daily dashboard update:
+Dashboard update policy:
 
 - `daily-monitor.yml` runs at 09:00 KST and writes `run_summary.json` from `python -m safety_zone_monitor run --summary-json run_summary.json`.
-- The workflow records `has_changes`, then runs `export-dashboard` with `always()` after the monitor step.
-- If `dashboard/data` changes and export succeeds, the workflow commits and pushes it so GitHub Pages reflects the latest run history on no-change and recorded-failure days.
+- When a successful run has `has_changes=true`, the workflow exports and commits the full `dashboard/data` set for change lists, current objects, and map layers.
+- Failed runs and quality-check failures do not update change data or current-object map data.
+- Monitoring history is still published for operator visibility: no-change and failed runs export/commit only `dashboard/data/overview.json`, so GitHub Pages shows the latest success/failure status and failure reason.
 - The 2026-07-28 Incheon `NEW` surge for `28125`, `28155`, `28275`, and `28290` is treated as an administrative-district reorganization adjustment, not ordinary new safety-zone creation.
 - Dashboard export excludes those `NEW` events from recent-change lists and sido new counts, while preserving the source DB events and writing the reason to `dashboard/data/change_exclusions.json`.
 

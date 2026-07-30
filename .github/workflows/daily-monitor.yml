@@ -50,7 +50,6 @@ jobs:
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true') }}
         run: python -m safety_zone_monitor audit-db
       - name: Run daily monitor
-        id: run_daily_monitor
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true') }}
         run: python -m safety_zone_monitor run --summary-json run_summary.json
       - name: Verify safety-zone data quality
@@ -58,23 +57,39 @@ jobs:
         run: python -m safety_zone_monitor quality-report
       - name: Check detected changes
         id: detected_changes
-        if: ${{ always() && !(github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true') }}
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true') }}
         run: |
-          for /f "usebackq tokens=*" %%i in (`python -c "import json, pathlib; p = pathlib.Path('run_summary.json'); print(str(json.load(p.open(encoding='utf-8')).get('has_changes', False)).lower() if p.exists() else 'false')"`) do echo has_changes=%%i>>%GITHUB_OUTPUT%
+          for /f "usebackq tokens=*" %%i in (`python -c "import json; print(str(json.load(open('run_summary.json', encoding='utf-8'))['has_changes']).lower())"`) do echo has_changes=%%i>>%GITHUB_OUTPUT%
       - name: Export dashboard data
-        id: export_dashboard
-        if: ${{ always() && !(github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true') }}
+        if: ${{ steps.detected_changes.outputs.has_changes == 'true' }}
         run: python -m safety_zone_monitor export-dashboard --output dashboard\data --event-limit 500 --baseline-date 2026-07-25
       - name: Commit dashboard data
-        if: ${{ always() && steps.export_dashboard.outcome == 'success' && !(github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true') }}
+        if: ${{ steps.detected_changes.outputs.has_changes == 'true' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add dashboard\data
           git diff --cached --quiet
           if errorlevel 1 (
-            git commit -m "Update dashboard data after monitor run"
+            git commit -m "Update dashboard data after safety-zone changes"
             git push
           ) else (
             echo No dashboard data changes to commit.
+          )
+      - name: Export monitoring history
+        id: export_monitoring_history
+        if: ${{ always() && steps.detected_changes.outputs.has_changes != 'true' && !(github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true') }}
+        run: python -m safety_zone_monitor export-dashboard --output dashboard\data --event-limit 500 --baseline-date 2026-07-25
+      - name: Commit monitoring history
+        if: ${{ always() && steps.export_monitoring_history.outcome == 'success' && steps.detected_changes.outputs.has_changes != 'true' && !(github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true') }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add dashboard\data\overview.json
+          git diff --cached --quiet
+          if errorlevel 1 (
+            git commit -m "Update dashboard monitoring history"
+            git push
+          ) else (
+            echo No monitoring history changes to commit.
           )
