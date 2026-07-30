@@ -208,7 +208,8 @@ DB가 실행되는 Windows 호스트에 설치한 **self-hosted runner**를 사�
 - 선택 Secrets: `SLACK_WEBHOOK_URL` 또는 `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
 - Pages 선택 Secret: `KAKAO_JS_KEY`
 
-매일 `00:00 UTC`, 즉 `09:00 KST`에 실행되며, 운영 전 `workflow_dispatch`로 수동 검증합니다.
+Supabase 온라인 운영 전환 전까지 예약 수집은 중단하고, 필요한 경우 `workflow_dispatch`로만
+수동 실행합니다. 온라인 운영 전환 후 GitHub-hosted runner 기반 정기 실행으로 다시 설정합니다.
 표준노드링크 매칭은 다음 마일스톤에서 `mobility.std_link.geom`을 대상으로 증분 구현합니다.
 
 ## 추가 문서
@@ -225,4 +226,4 @@ DB가 실행되는 Windows 호스트에 설치한 **self-hosted runner**를 사�
 - [전국 수집 전환 절차](docs/nationwide_rollout.md)
 - [전국 기준선 적재 정책](docs/nationwide_baseline_rollout_policy_20260723.md)
 - [전국 대시보드 공개 범위](docs/project_scope_nationwide_dashboard_20260723.md)
-- [매일 09:00 KST 자동실행 준비](docs/daily_automation.md)
+- [보호구역 수동 실행 및 자동실행 전환 준비](docs/daily_automation.md)

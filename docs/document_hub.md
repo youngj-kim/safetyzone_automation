@@ -73,7 +73,7 @@ DB 관련 문서는 두 저장소에 나뉘어 있다.
 
 ### 자동화와 검증
 
-- `docs/daily_automation.md`: 매일 09:00 KST 자동 실행 준비
+- `docs/daily_automation.md`: 보호구역 수동 실행 및 자동실행 전환 준비
 - `docs/windows_scheduler_github_dispatch.md`: Windows 스케줄러 기반 GitHub workflow dispatch
 - `docs/change_event_verification.md`: 변경 이벤트 검증
 - `docs/e2e_test_20260706.md`: 종로구 E2E 테스트 결과

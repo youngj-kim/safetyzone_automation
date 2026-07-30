@@ -1,7 +1,8 @@
-# 매일 09:00 KST 자동실행 준비
+# 보호구역 수동 실행 및 자동실행 전환 준비
 
-워크플로 파일은 `.github/workflows/daily-monitor.yml`이다. GitHub 예약 시간은 UTC를
-사용하므로 `0 0 * * *`가 매일 한국시간 09:00이다.
+워크플로 파일은 `.github/workflows/daily-monitor.yml`이다. Supabase 온라인 운영 전환 전까지
+예약 수집은 중단하고 `workflow_dispatch` 수동 실행만 유지한다. 기존 GitHub 예약 시간은 UTC
+기준 `0 0 * * *`, 한국시간 09:00이었으나 현재 workflow에서는 제거되어 있다.
 
 ## 실행 환경
 

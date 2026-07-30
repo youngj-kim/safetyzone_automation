@@ -1,9 +1,6 @@
 name: Daily safety-zone monitor
 
 on:
-  schedule:
-    # 09:00 KST
-    - cron: "0 0 * * *"
   workflow_dispatch:
     inputs:
       notification_test:

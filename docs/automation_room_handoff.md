@@ -189,7 +189,8 @@ Nationwide dashboard split update:
 
 Dashboard update policy:
 
-- `daily-monitor.yml` runs at 09:00 KST and writes `run_summary.json` from `python -m safety_zone_monitor run --summary-json run_summary.json`.
+- `daily-monitor.yml` currently keeps only `workflow_dispatch` manual runs while Supabase online operations are prepared; the former 09:00 KST schedule is disabled.
+- Manual monitor runs write `run_summary.json` from `python -m safety_zone_monitor run --summary-json run_summary.json`.
 - When a successful run has `has_changes=true`, the workflow exports and commits the full `dashboard/data` set for change lists, current objects, and map layers.
 - Failed runs and quality-check failures do not update change data or current-object map data.
 - Monitoring history is still published for operator visibility: no-change and failed runs export/commit only `dashboard/data/overview.json`, so GitHub Pages shows the latest success/failure status and failure reason.
