@@ -1,4 +1,7 @@
+from pathlib import Path
+
 from safety_zone_monitor.db import (
+    OPERATIONAL_MIGRATION_NAMES,
     change_summary_by_sido,
     classify_sgg_coverage,
     current_region_index,
@@ -23,6 +26,28 @@ def test_sanitize_error_message_redacts_sensitive_query_params() -> None:
     assert "secret-value" not in sanitized
     assert "serviceKey=[REDACTED]" in sanitized
     assert "token=[REDACTED]" in sanitized
+
+
+def test_operational_migration_subset_excludes_link_matching_objects() -> None:
+    migration_dir = Path("src/safety_zone_monitor/migrations")
+    combined = "\n".join(
+        (migration_dir / name).read_text(encoding="utf-8")
+        for name in OPERATIONAL_MIGRATION_NAMES
+    )
+
+    assert "zone_link_match" not in combined
+    assert "mobility.std_link" not in combined
+    assert "ngii_road_centerline" not in combined
+    assert set(OPERATIONAL_MIGRATION_NAMES) == {
+        "001_initial.sql",
+        "002_inactive_metrics.sql",
+        "003_make_transformed_geometry_valid.sql",
+        "004_geometry_qc.sql",
+        "005_facility_points_and_zone_groups.sql",
+        "006_facility_point_change_events.sql",
+        "012_facility_point_deleted_events.sql",
+        "013_facility_point_absence_tracking.sql",
+    }
 
 
 def test_sanitize_error_message_allows_empty_value() -> None:

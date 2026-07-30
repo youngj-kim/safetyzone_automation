@@ -44,6 +44,7 @@ class Settings:
     service_key: str
     database_url: str
     sgg_codes: tuple[str, ...]
+    db_mode: str = "local"
     api_url: str = DEFAULT_API_URL
     num_rows: int = 1000
     request_delay_seconds: float = 0.2
@@ -72,10 +73,14 @@ class Settings:
         num_rows = int(os.getenv("API_NUM_ROWS", "1000"))
         if not 1 <= num_rows <= 1000:
             raise ValueError("API_NUM_ROWS must be between 1 and 1000")
+        db_mode = os.getenv("SAFETYZONE_DB_MODE", "local").strip().lower()
+        if db_mode not in {"local", "cloud"}:
+            raise ValueError("SAFETYZONE_DB_MODE must be either 'local' or 'cloud'")
         return cls(
             service_key=service_key,
             database_url=database_url,
             sgg_codes=sgg_codes,
+            db_mode=db_mode,
             api_url=os.getenv("OPEN_API_URL", DEFAULT_API_URL).strip(),
             num_rows=num_rows,
             request_delay_seconds=float(os.getenv("API_REQUEST_DELAY_SECONDS", "0.2")),

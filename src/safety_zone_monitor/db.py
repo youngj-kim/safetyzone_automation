@@ -39,6 +39,16 @@ DEFAULT_WORK_EXTRACT_CHANGE_TYPES = (
     "POINT_ATTRIBUTE_CHANGED",
     "DELETED",
 )
+OPERATIONAL_MIGRATION_NAMES = (
+    "001_initial.sql",
+    "002_inactive_metrics.sql",
+    "003_make_transformed_geometry_valid.sql",
+    "004_geometry_qc.sql",
+    "005_facility_points_and_zone_groups.sql",
+    "006_facility_point_change_events.sql",
+    "012_facility_point_deleted_events.sql",
+    "013_facility_point_absence_tracking.sql",
+)
 SIDO_NAMES = {
     "11": "서울특별시",
     "12": "전라남도",
@@ -390,7 +400,7 @@ class Repository:
     def _connect(self) -> psycopg.Connection:
         return psycopg.connect(self.database_url, connect_timeout=10)
 
-    def migrate(self) -> None:
+    def migrate(self, *, operational_only: bool = False) -> None:
         migration_dir = files("safety_zone_monitor").joinpath("migrations")
         with self._connect() as connection:
             has_postgis = connection.execute(
@@ -398,12 +408,86 @@ class Repository:
             ).fetchone()[0]
             if not has_postgis:
                 raise RuntimeError(
-                    "The target mobility_db does not have PostGIS installed; "
-                    "do not create a separate database for this pipeline"
+                    "The target database does not have PostGIS installed; "
+                    "run `create extension if not exists postgis;` first"
                 )
             for migration in sorted(migration_dir.iterdir(), key=lambda path: path.name):
-                if migration.name.endswith(".sql"):
-                    connection.execute(migration.read_text(encoding="utf-8"))
+                if not migration.name.endswith(".sql"):
+                    continue
+                if operational_only and migration.name not in OPERATIONAL_MIGRATION_NAMES:
+                    continue
+                connection.execute(migration.read_text(encoding="utf-8"))
+
+    def audit_operational_contract(self) -> dict[str, Any]:
+        """Read-only verification of the cloud operational monitoring contract."""
+        with self._connect() as connection:
+            connection.execute("SET TRANSACTION READ ONLY")
+            has_postgis = connection.execute(
+                "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'postgis')"
+            ).fetchone()[0]
+            schemas = [
+                row[0]
+                for row in connection.execute(
+                    "SELECT schema_name FROM information_schema.schemata "
+                    "WHERE schema_name IN ('raw', 'analysis', 'ops', 'mobility') "
+                    "ORDER BY schema_name"
+                ).fetchall()
+            ]
+            required = (
+                "ops.pipeline_run",
+                "ops.notification_log",
+                "raw.police_zone_api_run",
+                "raw.police_zone_item_snapshot",
+                "analysis.zone_snapshot",
+                "analysis.zone_current",
+                "analysis.zone_change_event",
+                "analysis.zone_facility_point_snapshot",
+                "analysis.zone_facility_point_current",
+                "analysis.zone_facility_point_change_event",
+                "analysis.zone_facility_point_absence",
+                "analysis.v_zone_group_current",
+            )
+            excluded = (
+                "mobility.std_link",
+                "mobility.std_node",
+                "mobility.ngii_road_centerline",
+                "analysis.zone_link_match_candidate",
+                "analysis.zone_link_match_candidate_v2",
+                "analysis.zone_link_match_excluded_v2",
+                "analysis.v_zone_link_match_coverage_v2",
+            )
+            required_objects = {
+                name: connection.execute("SELECT to_regclass(%s)::text", (name,)).fetchone()[0]
+                is not None
+                for name in required
+            }
+            excluded_objects = {
+                name: connection.execute("SELECT to_regclass(%s)::text", (name,)).fetchone()[0]
+                is not None
+                for name in excluded
+            }
+            geometry = connection.execute(
+                """
+                SELECT f_table_schema, f_table_name, type, srid
+                FROM public.geometry_columns
+                WHERE f_table_schema = 'analysis'
+                ORDER BY f_table_schema, f_table_name
+                """
+            ).fetchall()
+            connection.rollback()
+        missing = [name for name, exists in required_objects.items() if not exists]
+        unexpected = [name for name, exists in excluded_objects.items() if exists]
+        return {
+            "status": "PASS" if has_postgis and not missing and not unexpected else "FAIL",
+            "postgis_installed": has_postgis,
+            "schemas": schemas,
+            "required_objects": required_objects,
+            "excluded_objects_present": unexpected,
+            "geometry": [
+                {"schema": row[0], "table": row[1], "type": row[2], "srid": row[3]}
+                for row in geometry
+            ],
+        }
 
     def audit_host_contract(self, *, include_counts: bool = False) -> dict[str, Any]:
         """Read-only verification of the standard-node-link integration contract."""

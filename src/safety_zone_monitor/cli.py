@@ -9,6 +9,7 @@ from safety_zone_monitor.config import Settings
 from safety_zone_monitor.db import (
     DEFAULT_DASHBOARD_BASELINE_DATE,
     DEFAULT_WORK_EXTRACT_CHANGE_TYPES,
+    OPERATIONAL_MIGRATION_NAMES,
     Repository,
 )
 from safety_zone_monitor.diff import ChangeType, PointChangeType
@@ -28,7 +29,13 @@ def _parser() -> argparse.ArgumentParser:
         "audit-db", help="Read-only check of the existing mobility_db integration contract"
     )
     subparsers.add_parser(
+        "audit-ops-db", help="Read-only check of the cloud operational monitoring contract"
+    )
+    subparsers.add_parser(
         "init-db", help="Add raw/analysis/ops monitoring objects to the existing mobility_db"
+    )
+    subparsers.add_parser(
+        "init-ops-db", help="Add only cloud operational monitoring objects to the target database"
     )
     run_command = subparsers.add_parser(
         "run",
@@ -145,6 +152,12 @@ def main() -> None:
             )
         )
         return
+    if args.command == "audit-ops-db":
+        report = repository.audit_operational_contract()
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        if report["status"] != "PASS":
+            raise SystemExit(1)
+        return
     if args.command == "init-db":
         audit = repository.audit_host_contract()
         missing = [name for name, exists in audit["required_objects"].items() if not exists]
@@ -152,6 +165,13 @@ def main() -> None:
             raise RuntimeError("Required mobility objects are missing: " + ", ".join(missing))
         repository.migrate()
         print("Monitoring schemas are ready in the existing mobility_db.")
+        return
+    if args.command == "init-ops-db":
+        repository.migrate(operational_only=True)
+        print(
+            "Cloud operational monitoring schemas are ready. Applied migrations: "
+            + ", ".join(OPERATIONAL_MIGRATION_NAMES)
+        )
         return
     if args.command == "quality-report":
         report = repository.quality_report(settings.sgg_codes)

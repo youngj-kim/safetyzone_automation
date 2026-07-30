@@ -57,8 +57,11 @@ def _verify_mobility_contract(repository: Repository) -> None:
 
 def run_pipeline(settings: Settings, *, record_events: bool = True) -> RunSummary:
     repository = Repository(settings.database_url)
-    _verify_mobility_contract(repository)
-    repository.migrate()
+    if settings.db_mode == "local":
+        _verify_mobility_contract(repository)
+        repository.migrate()
+    else:
+        repository.migrate(operational_only=True)
     run_id = repository.create_run(settings.sgg_codes, settings.api_url)
     try:
         client = SafetyZoneApiClient(
