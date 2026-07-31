@@ -189,7 +189,8 @@ Nationwide dashboard split update:
 
 Dashboard update policy:
 
-- `daily-monitor.yml` currently keeps only `workflow_dispatch` manual runs while Supabase online operations are prepared; the former 09:00 KST schedule is disabled.
+- `daily-monitor.yml` keeps `workflow_dispatch` manual runs and also runs the nationwide monitor as six scheduled chunks from 09:00 to 10:40 KST.
+- Scheduled runs resolve `SGG_CODES_FILE` from the cron time: `chunk_01` at 09:00 KST through `chunk_06` at 10:40 KST.
 - Manual monitor runs write `run_summary.json` from `python -m safety_zone_monitor run --summary-json run_summary.json`.
 - `prepare_db=false` is the normal run mode. `init-ops-db` runs only when the manual `prepare_db=true` input is selected.
 - In cloud mode, the pipeline audits the Supabase operational contract instead of rerunning migrations on every monitor run.
@@ -230,14 +231,15 @@ Kakao 설정 확인:
 - 전국 기준선 DB 등록은 2026-07-25 실행에서 성공했습니다.
 - 2026-07-26 실행도 전국 249개 시군구 기준으로 성공했으며 변경 건수는 0건입니다.
 - 2026-07-31에는 로컬 운영 DB subset을 Supabase로 이관한 뒤 `chunk_01` 일반 변경감지 run이 성공했습니다. `Run daily monitor`, `quality-report`, `Export monitoring history`, `Commit monitoring history`가 모두 성공했고, GitHub Pages 수동 배포도 성공했습니다.
+- 같은 날 자동 운영 정책을 전국 단일 실행에서 6개 청크 분산 schedule로 전환했습니다. 각 청크는 20분 간격으로 실행됩니다.
 - 대시보드 export는 `--baseline-date 2026-07-25`를 사용합니다. 전국 기준선 등록일의 대량 `NEW` 이벤트는 최근 변경 목록에서 제외하고 현재 객체로만 표시합니다.
 
 ## 남은 작업
 
-- `chunk_02`부터 `chunk_06`까지 Supabase 일반 변경감지를 순차 검증합니다.
+- 다음 자동 실행일에 `chunk_01`부터 `chunk_06`까지 scheduled run이 순차 성공하는지 확인합니다.
 - 실제 변경이 발생한 성공 run에서 전체 `dashboard/data` 갱신분이 커밋되고 GitHub Pages에 배포되는지 확인합니다.
 - 이후 일일 수집 성공 여부와 변경 건수는 대시보드 `모니터링 이력`에서 확인합니다.
-- 남은 청크 검증 후 09:00 KST schedule 재활성화 여부를 결정합니다.
+- 429가 다시 발생하면 청크 간격 또는 `API_REQUEST_DELAY_SECONDS`, `API_RATE_LIMIT_RETRY_SECONDS` 값을 보수적으로 조정합니다.
 
 ## 1번방 작업 순서
 

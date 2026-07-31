@@ -246,11 +246,11 @@ workflow에는 `SAFETYZONE_DB_MODE=cloud`가 고정되어 있으므로 GitHub va
 - 초기 운영 기준선은 로컬 운영 DB subset을 Supabase로 복사하는 방식으로 확정했다.
 - `chunk_01` 일반 변경감지는 Supabase에서 성공했고, `NEW` 폭증 없이 품질검사까지 통과했다.
 - 변경 없음/실패 이력 갱신은 전체 dashboard export가 아니라 `overview.json` 경량 export만 사용한다.
+- 자동 운영은 전국 단일 schedule이 아니라 09:00~10:40 KST 사이 20분 간격의 6개 청크 schedule로 전환했다.
 
 남은 사항:
 
-- `chunk_02`~`chunk_06` 일반 변경감지 검증
-- 충분히 안정화된 뒤 09:00 KST schedule 재활성화 여부 결정
+- 다음 자동 실행일에 `chunk_01`~`chunk_06` scheduled run 순차 성공 여부 확인
 - Supabase Free 용량과 백업 정책 확인
 - self-hosted runner 제거 또는 보관 시점 결정
 

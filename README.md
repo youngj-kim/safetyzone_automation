@@ -210,8 +210,9 @@ Roadview 확인을 사용할 수 있습니다. 모바일에서는 하단 현황�
 - 선택 Secrets: `SLACK_WEBHOOK_URL` 또는 `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
 - Pages 선택 Secret: `KAKAO_JS_KEY`
 
-2026-07-31 기준 `chunk_01` 일반 변경감지는 Supabase에서 성공했습니다. 예약 수집은 아직 중단하고,
-남은 청크를 수동 검증한 뒤 GitHub-hosted runner 기반 09:00 KST schedule 재활성화 여부를 결정합니다.
+2026-07-31 기준 `chunk_01` 일반 변경감지는 Supabase에서 성공했습니다. 예약 수집은 전국 단일 실행이
+아니라 09:00~10:40 KST 사이 20분 간격의 6개 청크 분산 schedule로 전환했습니다. 실제 변경이
+감지된 성공 실행만 전체 `dashboard/data`를 갱신하고, 실패 또는 무변경 실행은 모니터링 이력만 갱신합니다.
 표준노드링크 매칭은 다음 마일스톤에서 `mobility.std_link.geom`을 대상으로 증분 구현합니다.
 
 ## 추가 문서

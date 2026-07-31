@@ -1,6 +1,13 @@
 name: Daily safety-zone monitor
 
 on:
+  schedule:
+    - cron: "0 0 * * *" # 09:00 KST, chunk 01
+    - cron: "20 0 * * *" # 09:20 KST, chunk 02
+    - cron: "40 0 * * *" # 09:40 KST, chunk 03
+    - cron: "0 1 * * *" # 10:00 KST, chunk 04
+    - cron: "20 1 * * *" # 10:20 KST, chunk 05
+    - cron: "40 1 * * *" # 10:40 KST, chunk 06
   workflow_dispatch:
     inputs:
       notification_test:
@@ -35,7 +42,7 @@ jobs:
       OPEN_API_SERVICE_KEY: ${{ secrets.OPEN_API_SERVICE_KEY }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       SGG_CODES: ${{ vars.SGG_CODES }}
-      SGG_CODES_FILE: ${{ inputs.sgg_codes_file || vars.SGG_CODES_FILE }}
+      SGG_CODES_FILE_DEFAULT: ${{ vars.SGG_CODES_FILE || 'config/sgg_codes_nationwide.txt' }}
       API_REQUEST_DELAY_SECONDS: ${{ vars.API_REQUEST_DELAY_SECONDS || '1.0' }}
       API_RATE_LIMIT_MAX_RETRIES: ${{ vars.API_RATE_LIMIT_MAX_RETRIES || '5' }}
       API_RATE_LIMIT_RETRY_SECONDS: ${{ vars.API_RATE_LIMIT_RETRY_SECONDS || '60' }}
@@ -54,6 +61,25 @@ jobs:
       - name: Send notification test
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true' }}
         run: python -m safety_zone_monitor test-notification
+      - name: Resolve SGG codes file
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true') }}
+        run: |
+          manual_file="${{ github.event_name == 'workflow_dispatch' && inputs.sgg_codes_file || '' }}"
+          if [ -n "$manual_file" ]; then
+            selected_file="$manual_file"
+          else
+            case "${{ github.event.schedule }}" in
+              "0 0 * * *") selected_file="config/sgg_chunks/nationwide_chunk_01.txt" ;;
+              "20 0 * * *") selected_file="config/sgg_chunks/nationwide_chunk_02.txt" ;;
+              "40 0 * * *") selected_file="config/sgg_chunks/nationwide_chunk_03.txt" ;;
+              "0 1 * * *") selected_file="config/sgg_chunks/nationwide_chunk_04.txt" ;;
+              "20 1 * * *") selected_file="config/sgg_chunks/nationwide_chunk_05.txt" ;;
+              "40 1 * * *") selected_file="config/sgg_chunks/nationwide_chunk_06.txt" ;;
+              *) selected_file="$SGG_CODES_FILE_DEFAULT" ;;
+            esac
+          fi
+          echo "SGG_CODES_FILE=$selected_file" >> "$GITHUB_ENV"
+          echo "Using SGG_CODES_FILE=$selected_file"
       - name: Prepare operational database
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.prepare_db == 'true' && inputs.notification_test != 'true' }}
         run: python -m safety_zone_monitor init-ops-db

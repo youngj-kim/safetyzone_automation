@@ -1,8 +1,8 @@
 # 보호구역 수동 실행 및 자동실행 전환 준비
 
-워크플로 파일은 `.github/workflows/daily-monitor.yml`이다. Supabase 온라인 운영 전환 검증은
-진행 중이며, 예약 수집은 아직 중단하고 `workflow_dispatch` 수동 실행만 유지한다. 기존 GitHub
-예약 시간은 UTC 기준 `0 0 * * *`, 한국시간 09:00이었으나 현재 workflow에서는 제거되어 있다.
+워크플로 파일은 `.github/workflows/daily-monitor.yml`이다. Supabase 온라인 운영 전환 이후
+예약 수집은 전국 단일 실행 대신 6개 청크 분산 schedule로 운영한다. 수동 검증과 긴급 재실행을 위해
+`workflow_dispatch`도 계속 유지한다.
 
 ## 실행 환경
 
@@ -114,12 +114,28 @@ GitHub Actions 로그에서 이 유형을 먼저 확인한다.
 6. 중복·도형·시군구 범위 품질검사
 7. 변경이 있으면 전체 `dashboard/data` export, 변경이 없거나 실패 이력만 필요하면 `overview.json`만 export
 
+## 자동 실행 schedule
+
+GitHub Actions cron은 UTC 기준이므로 한국시간 09:00~10:40에 맞춰 다음처럼 분산한다.
+
+| KST | UTC cron | 대상 파일 |
+|---|---|---|
+| 09:00 | `0 0 * * *` | `config/sgg_chunks/nationwide_chunk_01.txt` |
+| 09:20 | `20 0 * * *` | `config/sgg_chunks/nationwide_chunk_02.txt` |
+| 09:40 | `40 0 * * *` | `config/sgg_chunks/nationwide_chunk_03.txt` |
+| 10:00 | `0 1 * * *` | `config/sgg_chunks/nationwide_chunk_04.txt` |
+| 10:20 | `20 1 * * *` | `config/sgg_chunks/nationwide_chunk_05.txt` |
+| 10:40 | `40 1 * * *` | `config/sgg_chunks/nationwide_chunk_06.txt` |
+
+수동 실행에서는 `sgg_codes_file` 입력값을 지정하면 해당 청크만 실행한다. schedule 실행에서는
+cron 문자열에 따라 workflow 내부에서 청크 파일을 자동 선택한다.
+
 ## 운영 전 수동 확인
 
 GitHub Actions의 `Daily safety-zone monitor`에서 `Run workflow`를 눌러 한 번 실행한다.
 모든 단계가 초록색인지 확인한다. 2026-07-31 기준 `chunk_01`은 Supabase 운영 DB에서 일반
-변경감지, 품질검사, 모니터링 이력 갱신까지 성공했다. 남은 청크도 같은 방식으로 검증한 뒤
-09:00 KST schedule 재활성화 여부를 결정한다.
+변경감지, 품질검사, 모니터링 이력 갱신까지 성공했다. 자동 schedule은 청크 분산 방식으로 켜져
+있으므로 다음 실행일에는 각 청크가 순차적으로 성공하는지 확인한다.
 
 ## Windows 시간 동기화 점검
 

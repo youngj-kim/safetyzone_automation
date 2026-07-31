@@ -130,7 +130,8 @@
 - 변경이 없는 성공 실행 또는 실패 실행에서는 전체 dashboard export 대신 `dashboard/data/overview.json`만 갱신하도록 경량화했다.
 - `chunk_01` 일반 변경감지 최종 run은 `Run daily monitor`, `quality-report`, `Export monitoring history`, `Commit monitoring history`가 모두 성공했다.
 - GitHub Pages 수동 배포까지 완료해 최신 모니터링 이력이 `safetyzone.yjkim.dev`에 반영되도록 했다.
+- 자동 운영은 전국 단일 09:00 실행 대신 09:00~10:40 KST 사이 20분 간격의 6개 청크 schedule로 정비했다.
 
 결정사항: 보호구역 API 수집, 변경 감지, 모니터링 이력, 정적 대시보드만 Supabase + GitHub Actions + GitHub Pages로 온라인 운영한다.
 이유: 취업 이후 개인 PC를 계속 켜둘 수 없고, 표준노드링크/NGII/매칭 검수 DB는 대용량 로컬 분석 자산이라 온라인 운영 범위에 넣지 않는 편이 비용과 유지보수 측면에서 안전하다.
-다음 작업: 남은 전국 청크를 같은 방식으로 수동 검증하고, 충분히 안정화되면 09:00 KST schedule 재활성화 여부를 결정한다.
+다음 작업: 다음 자동 실행일에 6개 scheduled run이 순차 성공하는지 확인하고, 429가 반복되면 청크 간격과 API backoff 값을 조정한다.

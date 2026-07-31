@@ -5,8 +5,13 @@ def test_daily_workflow_uses_dispatch_and_quality_gate() -> None:
     workflow = Path(".github/workflows/daily-monitor.yml").read_text(encoding="utf-8")
 
     assert "workflow_dispatch:" in workflow
-    assert "schedule:" not in workflow
-    assert 'cron: "0 0 * * *"' not in workflow
+    assert "schedule:" in workflow
+    assert 'cron: "0 0 * * *"' in workflow
+    assert 'cron: "20 0 * * *"' in workflow
+    assert 'cron: "40 0 * * *"' in workflow
+    assert 'cron: "0 1 * * *"' in workflow
+    assert 'cron: "20 1 * * *"' in workflow
+    assert 'cron: "40 1 * * *"' in workflow
     assert "runs-on: ubuntu-latest" in workflow
     assert "runs-on: [self-hosted, windows, x64]" not in workflow
     assert "shell: cmd" not in workflow
@@ -38,4 +43,8 @@ def test_daily_workflow_uses_dispatch_and_quality_gate() -> None:
     assert "Update dashboard monitoring history" in workflow
     assert "git add dashboard/data" in workflow
     assert "sgg_codes_file:" in workflow
-    assert "SGG_CODES_FILE: ${{ inputs.sgg_codes_file || vars.SGG_CODES_FILE }}" in workflow
+    assert "Resolve SGG codes file" in workflow
+    assert "SGG_CODES_FILE_DEFAULT:" in workflow
+    assert "config/sgg_chunks/nationwide_chunk_01.txt" in workflow
+    assert "config/sgg_chunks/nationwide_chunk_06.txt" in workflow
+    assert 'echo "SGG_CODES_FILE=$selected_file" >> "$GITHUB_ENV"' in workflow
