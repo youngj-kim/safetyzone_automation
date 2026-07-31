@@ -33,6 +33,7 @@ def test_daily_workflow_uses_dispatch_and_quality_gate() -> None:
     assert "python -m safety_zone_monitor export-dashboard" in workflow
     assert "Update dashboard data after safety-zone changes" in workflow
     assert "Export monitoring history" in workflow
+    assert "export-dashboard --output dashboard/data --overview-only" in workflow
     assert "dashboard/data/overview.json" in workflow
     assert "Update dashboard monitoring history" in workflow
     assert "git add dashboard/data" in workflow

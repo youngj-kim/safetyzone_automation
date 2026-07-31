@@ -2377,9 +2377,20 @@ class Repository:
         *,
         event_limit: int = 500,
         baseline_date: str | None = DEFAULT_DASHBOARD_BASELINE_DATE,
+        overview_only: bool = False,
     ) -> None:
         target = Path(output_dir)
         target.mkdir(parents=True, exist_ok=True)
+        if overview_only:
+            (target / "overview.json").write_text(
+                json.dumps(
+                    self.dashboard_overview(),
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+                encoding="utf-8",
+            )
+            return
         current_zones = self.dashboard_current_zones_geojson()
         current_points = self.dashboard_current_points_geojson()
         zones_by_sido = group_feature_collection_by_sido(current_zones)

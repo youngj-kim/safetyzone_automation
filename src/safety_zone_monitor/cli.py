@@ -87,6 +87,11 @@ def _parser() -> argparse.ArgumentParser:
             "use an empty value to disable"
         ),
     )
+    dashboard.add_argument(
+        "--overview-only",
+        action="store_true",
+        help="Export only overview.json for lightweight monitoring history updates",
+    )
     extract = subparsers.add_parser(
         "export-change-extracts",
         help="Export changed polygon/point GeoJSON files for downstream work",
@@ -221,6 +226,7 @@ def main() -> None:
             output,
             event_limit=args.event_limit,
             baseline_date=baseline_date,
+            overview_only=args.overview_only,
         )
         print(f"Dashboard data exported to {output}.")
         return

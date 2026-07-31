@@ -100,7 +100,7 @@ jobs:
       - name: Export monitoring history
         id: export_monitoring_history
         if: ${{ always() && steps.detected_changes.outputs.full_dashboard_export != 'true' && !(github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true') }}
-        run: python -m safety_zone_monitor export-dashboard --output dashboard/data --event-limit 500 --baseline-date 2026-07-25
+        run: python -m safety_zone_monitor export-dashboard --output dashboard/data --overview-only
       - name: Commit monitoring history
         if: ${{ always() && steps.export_monitoring_history.outcome == 'success' && steps.detected_changes.outputs.full_dashboard_export != 'true' && !(github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true') }}
         run: |
