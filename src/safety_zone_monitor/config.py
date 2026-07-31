@@ -48,6 +48,8 @@ class Settings:
     api_url: str = DEFAULT_API_URL
     num_rows: int = 1000
     request_delay_seconds: float = 0.2
+    rate_limit_max_retries: int = 4
+    rate_limit_retry_seconds: float = 60.0
     timeout_seconds: float = 30.0
     slack_webhook_url: str | None = None
     telegram_bot_token: str | None = None
@@ -84,6 +86,8 @@ class Settings:
             api_url=os.getenv("OPEN_API_URL", DEFAULT_API_URL).strip(),
             num_rows=num_rows,
             request_delay_seconds=float(os.getenv("API_REQUEST_DELAY_SECONDS", "0.2")),
+            rate_limit_max_retries=int(os.getenv("API_RATE_LIMIT_MAX_RETRIES", "4")),
+            rate_limit_retry_seconds=float(os.getenv("API_RATE_LIMIT_RETRY_SECONDS", "60")),
             timeout_seconds=float(os.getenv("API_TIMEOUT_SECONDS", "30")),
             slack_webhook_url=os.getenv("SLACK_WEBHOOK_URL") or None,
             telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN") or None,

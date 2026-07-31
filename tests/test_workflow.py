@@ -17,11 +17,17 @@ def test_daily_workflow_uses_dispatch_and_quality_gate() -> None:
     assert "python -m safety_zone_monitor init-ops-db" in workflow
     assert "python -m safety_zone_monitor audit-ops-db" in workflow
     assert "python -m safety_zone_monitor audit-db" not in workflow
-    assert "python -m safety_zone_monitor run --summary-json run_summary.json" in workflow
+    assert (
+        "python -m safety_zone_monitor run $baseline_arg --summary-json run_summary.json"
+        in workflow
+    )
     assert "python -m safety_zone_monitor quality-report" in workflow
-    assert "steps.detected_changes.outputs.has_changes == 'true'" in workflow
+    assert "steps.detected_changes.outputs.full_dashboard_export == 'true'" in workflow
     assert "Check detected changes" in workflow
     assert "run_summary.json" in workflow
+    assert "baseline_load:" in workflow
+    assert 'baseline_arg="--baseline"' in workflow
+    assert "full_dashboard_export=true" in workflow
     assert "python -m safety_zone_monitor export-dashboard" in workflow
     assert "Update dashboard data after safety-zone changes" in workflow
     assert "Export monitoring history" in workflow

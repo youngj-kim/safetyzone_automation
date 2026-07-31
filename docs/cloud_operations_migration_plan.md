@@ -141,6 +141,8 @@ workflow에는 `SAFETYZONE_DB_MODE=cloud`가 고정되어 있으므로 GitHub va
 
 수동 chunk 실행 시에는 repository variable을 바꾸지 않고 workflow dispatch 입력 `sgg_codes_file`에 `config/sgg_chunks/nationwide_chunk_01.txt` 같은 경로를 넣는다.
 
+초기 기준선 적재는 workflow dispatch 입력 `baseline_load=true`로 실행한다. 이 모드는 `run --baseline`을 사용해 current/snapshot은 채우되 변경 이벤트와 알림은 만들지 않는다. 기준선 적재도 대시보드의 현재 객체 파일은 갱신해야 하므로 `dashboard/data` 전체 export/commit을 수행한다.
+
 ## 6. GitHub Actions 전환 작업 계획
 
 ### 6.1 workflow 목표 형태
@@ -149,6 +151,7 @@ workflow에는 `SAFETYZONE_DB_MODE=cloud`가 고정되어 있으므로 GitHub va
 
 - `runs-on: ubuntu-latest`
 - `workflow_dispatch` 수동 실행 유지, schedule은 아직 비활성
+- 초기 적재용 `baseline_load` 입력 지원
 - 기본 shell은 bash
 - Python은 `actions/setup-python`으로 3.11 또는 3.12 고정
 - `python -m pip install .` 실행

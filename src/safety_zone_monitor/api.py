@@ -112,6 +112,8 @@ class SafetyZoneApiClient:
         num_rows: int = 1000,
         timeout_seconds: float = 30.0,
         delay_seconds: float = 0.2,
+        rate_limit_max_retries: int = 4,
+        rate_limit_retry_seconds: float = 60.0,
         allow_empty_result: bool = False,
         session: requests.Session | None = None,
     ) -> None:
@@ -120,6 +122,8 @@ class SafetyZoneApiClient:
         self.num_rows = num_rows
         self.timeout_seconds = timeout_seconds
         self.delay_seconds = delay_seconds
+        self.rate_limit_max_retries = rate_limit_max_retries
+        self.rate_limit_retry_seconds = rate_limit_retry_seconds
         self.allow_empty_result = allow_empty_result
         self.empty_result_sgg_codes: set[str] = set()
         self.session = session or requests.Session()
@@ -137,7 +141,14 @@ class SafetyZoneApiClient:
             self.session.mount("https://", HTTPAdapter(max_retries=retry))
         self.session.headers.update({"User-Agent": "safety-zone-monitor/0.1"})
 
-    def _fetch_page(self, sgg_code: str, page_no: int) -> Mapping[str, Any]:
+    def _request_page(self, params: dict[str, object]) -> requests.Response:
+        return self.session.get(
+            self.base_url,
+            params=params,
+            timeout=self.timeout_seconds,
+        )
+
+    def _fetch_page_once(self, sgg_code: str, page_no: int) -> Mapping[str, Any]:
         params = {
             "serviceKey": self.service_key,
             "numOfRows": self.num_rows,
@@ -145,11 +156,7 @@ class SafetyZoneApiClient:
             "sggCd": sgg_code,
         }
         try:
-            response = self.session.get(
-                self.base_url,
-                params=params,
-                timeout=self.timeout_seconds,
-            )
+            response = self._request_page(params)
             response.raise_for_status()
             payload = response.json()
         except requests.RequestException as exc:
@@ -190,6 +197,27 @@ class SafetyZoneApiClient:
                 sgg_code=sgg_code,
                 page_no=page_no,
             ) from exc
+
+    def _fetch_page(self, sgg_code: str, page_no: int) -> Mapping[str, Any]:
+        attempt = 0
+        while True:
+            try:
+                return self._fetch_page_once(sgg_code, page_no)
+            except ApiError as exc:
+                if exc.category != "RATE_LIMIT" or attempt >= self.rate_limit_max_retries:
+                    raise
+                wait_seconds = self.rate_limit_retry_seconds * (attempt + 1)
+                logger.warning(
+                    "Rate limited while fetching district=%s page=%s; "
+                    "retrying in %.1f seconds (%s/%s)",
+                    sgg_code,
+                    page_no,
+                    wait_seconds,
+                    attempt + 1,
+                    self.rate_limit_max_retries,
+                )
+                time.sleep(wait_seconds)
+                attempt += 1
 
     def fetch_district(self, sgg_code: str) -> list[dict[str, Any]]:
         records: list[dict[str, Any]] = []

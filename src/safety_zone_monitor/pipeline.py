@@ -70,6 +70,8 @@ def run_pipeline(settings: Settings, *, record_events: bool = True) -> RunSummar
             num_rows=settings.num_rows,
             timeout_seconds=settings.timeout_seconds,
             delay_seconds=settings.request_delay_seconds,
+            rate_limit_max_retries=settings.rate_limit_max_retries,
+            rate_limit_retry_seconds=settings.rate_limit_retry_seconds,
             allow_empty_result=True,
         )
         raw_items = client.fetch_all(settings.sgg_codes)
