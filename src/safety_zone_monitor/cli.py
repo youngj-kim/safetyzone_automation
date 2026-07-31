@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 from pathlib import Path
 
 from safety_zone_monitor.config import Settings
@@ -36,6 +37,25 @@ def _parser() -> argparse.ArgumentParser:
     )
     subparsers.add_parser(
         "init-ops-db", help="Add only cloud operational monitoring objects to the target database"
+    )
+    copy_ops = subparsers.add_parser(
+        "copy-ops-db",
+        help="Copy only operational monitoring tables from another PostgreSQL database",
+    )
+    copy_ops.add_argument(
+        "--source-database-url-env",
+        default="SOURCE_DATABASE_URL",
+        help="Environment variable containing the source database URL",
+    )
+    copy_ops.add_argument(
+        "--replace-target",
+        action="store_true",
+        help="Truncate target operational tables before copying",
+    )
+    copy_ops.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print source/target row counts without copying data",
     )
     run_command = subparsers.add_parser(
         "run",
@@ -172,6 +192,21 @@ def main() -> None:
             "Cloud operational monitoring schemas are ready. Applied migrations: "
             + ", ".join(OPERATIONAL_MIGRATION_NAMES)
         )
+        return
+    if args.command == "copy-ops-db":
+        source_database_url = os.getenv(args.source_database_url_env, "").strip()
+        if not source_database_url:
+            raise RuntimeError(
+                f"Missing source database URL environment variable: "
+                f"{args.source_database_url_env}"
+            )
+        repository.migrate(operational_only=True)
+        summary = repository.copy_operational_data_from(
+            source_database_url,
+            replace_target=args.replace_target,
+            dry_run=args.dry_run,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
         return
     if args.command == "quality-report":
         report = repository.quality_report(settings.sgg_codes)

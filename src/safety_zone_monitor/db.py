@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 import re
 import uuid
+from contextlib import ExitStack
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
 import psycopg
+from psycopg import sql
 
 from safety_zone_monitor.diff import (
     ChangeType,
@@ -49,6 +51,19 @@ OPERATIONAL_MIGRATION_NAMES = (
     "012_facility_point_deleted_events.sql",
     "013_facility_point_absence_tracking.sql",
 )
+OPERATIONAL_TABLE_NAMES = (
+    "ops.pipeline_run",
+    "raw.police_zone_api_run",
+    "raw.police_zone_item_snapshot",
+    "analysis.zone_snapshot",
+    "analysis.zone_current",
+    "analysis.zone_change_event",
+    "ops.notification_log",
+    "analysis.zone_facility_point_snapshot",
+    "analysis.zone_facility_point_current",
+    "analysis.zone_facility_point_change_event",
+    "analysis.zone_facility_point_absence",
+)
 SIDO_NAMES = {
     "11": "서울특별시",
     "12": "전라남도",
@@ -79,6 +94,11 @@ def sanitize_error_message(message: str | None) -> str | None:
     if not message:
         return message
     return SENSITIVE_QUERY_PARAM_PATTERN.sub(r"\1[REDACTED]", message)
+
+
+def qualified_identifier(name: str) -> sql.Composed:
+    schema_name, table_name = name.split(".", 1)
+    return sql.SQL(".").join((sql.Identifier(schema_name), sql.Identifier(table_name)))
 
 
 def classify_sgg_coverage(
@@ -546,6 +566,107 @@ class Repository:
             ],
             "exact_rows": counts,
         }
+
+    def operational_table_counts(self) -> dict[str, int]:
+        with self._connect() as connection:
+            connection.execute("SET TRANSACTION READ ONLY")
+            counts = {
+                table_name: connection.execute(
+                    sql.SQL("SELECT COUNT(*) FROM {}").format(
+                        qualified_identifier(table_name)
+                    )
+                ).fetchone()[0]
+                for table_name in OPERATIONAL_TABLE_NAMES
+            }
+            connection.rollback()
+        return counts
+
+    def reset_operational_data(self, connection: psycopg.Connection) -> None:
+        connection.execute(
+            sql.SQL("TRUNCATE TABLE {} RESTART IDENTITY CASCADE").format(
+                sql.SQL(", ").join(
+                    qualified_identifier(table_name)
+                    for table_name in OPERATIONAL_TABLE_NAMES
+                )
+            )
+        )
+
+    def _sync_operational_sequences(self, connection: psycopg.Connection) -> None:
+        serial_columns = (
+            ("analysis.zone_change_event", "event_id"),
+            ("analysis.zone_facility_point_change_event", "event_id"),
+            ("ops.notification_log", "notification_id"),
+        )
+        for table_name, column_name in serial_columns:
+            sequence_name = connection.execute(
+                "SELECT pg_get_serial_sequence(%s, %s)",
+                (table_name, column_name),
+            ).fetchone()[0]
+            if not sequence_name:
+                continue
+            max_value = connection.execute(
+                sql.SQL("SELECT MAX({}) FROM {}").format(
+                    sql.Identifier(column_name),
+                    qualified_identifier(table_name),
+                )
+            ).fetchone()[0]
+            if max_value is None:
+                connection.execute("SELECT setval(%s::regclass, 1, false)", (sequence_name,))
+            else:
+                connection.execute(
+                    "SELECT setval(%s::regclass, %s, true)",
+                    (sequence_name, max_value),
+                )
+
+    def copy_operational_data_from(
+        self,
+        source_database_url: str,
+        *,
+        replace_target: bool = False,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        source = Repository(source_database_url)
+        source_counts = source.operational_table_counts()
+        target_counts_before = self.operational_table_counts()
+        target_has_rows = any(target_counts_before.values())
+
+        summary: dict[str, Any] = {
+            "source_counts": source_counts,
+            "target_counts_before": target_counts_before,
+            "replace_target": replace_target,
+            "dry_run": dry_run,
+        }
+        if dry_run:
+            summary["status"] = "DRY_RUN"
+            return summary
+        if target_has_rows and not replace_target:
+            raise RuntimeError(
+                "Target operational tables are not empty; rerun with --replace-target "
+                "to truncate and replace them"
+            )
+
+        with source._connect() as source_connection, self._connect() as target_connection:
+            if replace_target:
+                self.reset_operational_data(target_connection)
+            for table_name in OPERATIONAL_TABLE_NAMES:
+                copy_to = sql.SQL("COPY {} TO STDOUT").format(
+                    qualified_identifier(table_name)
+                )
+                copy_from = sql.SQL("COPY {} FROM STDIN").format(
+                    qualified_identifier(table_name)
+                )
+                with ExitStack() as stack:
+                    source_cursor = stack.enter_context(source_connection.cursor())
+                    target_cursor = stack.enter_context(target_connection.cursor())
+                    source_copy = stack.enter_context(source_cursor.copy(copy_to))
+                    target_copy = stack.enter_context(target_cursor.copy(copy_from))
+                    for chunk in source_copy:
+                        target_copy.write(chunk)
+            self._sync_operational_sequences(target_connection)
+
+        summary["target_counts_after"] = self.operational_table_counts()
+        summary["status"] = "COPIED"
+        return summary
 
     def quality_report(self, expected_sgg_codes: tuple[str, ...] = ()) -> dict[str, Any]:
         """Read-only checks for identity, coverage, group linkage, and geometry quality."""

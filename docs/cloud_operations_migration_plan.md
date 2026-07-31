@@ -240,11 +240,57 @@ workflow에는 `SAFETYZONE_DB_MODE=cloud`가 고정되어 있으므로 GitHub va
 - Supabase project region
 - Supabase 연결 문자열 종류: direct connection 또는 pooler
 - 운영 migration을 기존 폴더에서 필터링할지, 별도 폴더로 분리할지
-- 초기 데이터 이관 방식: 로컬 DB dump/restore subset 또는 Supabase에서 chunk 재수집 baseline
+- 초기 데이터 이관 방식: 로컬 DB 운영 subset 복사 후 chunk 단위 비교 검증
 - 최초 전국 운영 반영 방식: 한 번에 실행할지, chunk별 수동 실행 후 schedule 전환할지
 - self-hosted runner 제거 시점: Supabase hosted workflow가 최소 1회 이상 정상 schedule 성공한 뒤
 
-## 9. 구현 메모
+## 9. 로컬 운영 DB에서 Supabase로 기준선 이관
+
+온라인 수집 경로가 정상임을 확인한 뒤에는 Supabase를 첫 적재 변경감지 상태로 계속 쌓기보다, 기존 로컬 운영 DB의 보호구역 운영 subset을 Supabase 기준선으로 복사한다.
+
+복사 명령은 다음 테이블만 대상으로 한다.
+
+- `ops.pipeline_run`
+- `ops.notification_log`
+- `raw.police_zone_api_run`
+- `raw.police_zone_item_snapshot`
+- `analysis.zone_snapshot`
+- `analysis.zone_current`
+- `analysis.zone_change_event`
+- `analysis.zone_facility_point_snapshot`
+- `analysis.zone_facility_point_current`
+- `analysis.zone_facility_point_change_event`
+- `analysis.zone_facility_point_absence`
+
+복사 대상에는 `mobility.*`, `raw.raw_std_*`, `analysis.zone_link_match_*`, NGII 도로중심선 객체를 포함하지 않는다.
+
+실행 전 dry-run:
+
+```powershell
+$env:DATABASE_URL="Supabase 연결 문자열"
+$env:SOURCE_DATABASE_URL="로컬 mobility_db 연결 문자열"
+.\.venv\Scripts\python.exe -m safety_zone_monitor copy-ops-db --dry-run
+```
+
+Supabase 운영 테이블을 비우고 로컬 운영 subset으로 교체:
+
+```powershell
+$env:DATABASE_URL="Supabase 연결 문자열"
+$env:SOURCE_DATABASE_URL="로컬 mobility_db 연결 문자열"
+.\.venv\Scripts\python.exe -m safety_zone_monitor copy-ops-db --replace-target
+```
+
+이관 후 검증:
+
+```powershell
+.\.venv\Scripts\python.exe -m safety_zone_monitor audit-ops-db
+.\.venv\Scripts\python.exe -m safety_zone_monitor quality-report
+.\.venv\Scripts\python.exe -m safety_zone_monitor export-dashboard --output dashboard\data --event-limit 500 --baseline-date 2026-07-25
+```
+
+이관 검증 후에는 GitHub Actions에서 이미 성공한 chunk 하나를 일반 변경감지 모드로 다시 실행한다. 정상 기준은 `NEW` 폭증이 아니라 기존 기준선과 비교된 `UNCHANGED` 중심 결과다.
+
+## 10. 구현 메모
 
 온라인 운영 전환의 핵심은 "보호구역 모니터링 DB"와 "도로망 매칭 검수 DB"를 코드와 migration 수준에서 분리하는 것이다. 현재 저장소는 기능적으로 두 영역이 함께 있으므로, Supabase 전환은 단순히 `DATABASE_URL`만 바꾸면 끝나지 않는다.
 

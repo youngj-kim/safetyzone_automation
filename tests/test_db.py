@@ -2,6 +2,7 @@ from pathlib import Path
 
 from safety_zone_monitor.db import (
     OPERATIONAL_MIGRATION_NAMES,
+    OPERATIONAL_TABLE_NAMES,
     change_summary_by_sido,
     classify_sgg_coverage,
     current_region_index,
@@ -47,6 +48,28 @@ def test_operational_migration_subset_excludes_link_matching_objects() -> None:
         "006_facility_point_change_events.sql",
         "012_facility_point_deleted_events.sql",
         "013_facility_point_absence_tracking.sql",
+    }
+
+
+def test_operational_copy_subset_excludes_local_matching_tables() -> None:
+    combined = "\n".join(OPERATIONAL_TABLE_NAMES)
+
+    assert "raw.raw_std_" not in combined
+    assert "mobility." not in combined
+    assert "ngii" not in combined
+    assert "zone_link_match" not in combined
+    assert set(OPERATIONAL_TABLE_NAMES) == {
+        "ops.pipeline_run",
+        "raw.police_zone_api_run",
+        "raw.police_zone_item_snapshot",
+        "analysis.zone_snapshot",
+        "analysis.zone_current",
+        "analysis.zone_change_event",
+        "ops.notification_log",
+        "analysis.zone_facility_point_snapshot",
+        "analysis.zone_facility_point_current",
+        "analysis.zone_facility_point_change_event",
+        "analysis.zone_facility_point_absence",
     }
 
 
