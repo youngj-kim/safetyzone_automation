@@ -15,6 +15,10 @@ on:
         description: "Load current/snapshot rows without change events or notifications"
         required: false
         default: "false"
+      prepare_db:
+        description: "Run operational DB migrations before monitoring"
+        required: false
+        default: "false"
 
 concurrency:
   group: safety-zone-daily-monitor
@@ -51,7 +55,7 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true' }}
         run: python -m safety_zone_monitor test-notification
       - name: Prepare operational database
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true') }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.prepare_db == 'true' && inputs.notification_test != 'true' }}
         run: python -m safety_zone_monitor init-ops-db
       - name: Verify operational database
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true') }}

@@ -14,6 +14,8 @@ def test_daily_workflow_uses_dispatch_and_quality_gate() -> None:
     assert "SAFETYZONE_DB_MODE: cloud" in workflow
     assert "actions/setup-python@v5" in workflow
     assert 'python-version: "3.11"' in workflow
+    assert "prepare_db:" in workflow
+    assert "inputs.prepare_db == 'true'" in workflow
     assert "python -m safety_zone_monitor init-ops-db" in workflow
     assert "python -m safety_zone_monitor audit-ops-db" in workflow
     assert "python -m safety_zone_monitor audit-db" not in workflow
