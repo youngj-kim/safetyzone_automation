@@ -418,7 +418,11 @@ class Repository:
         self.database_url = database_url
 
     def _connect(self) -> psycopg.Connection:
-        return psycopg.connect(self.database_url, connect_timeout=10)
+        return psycopg.connect(
+            self.database_url,
+            connect_timeout=10,
+            prepare_threshold=None,
+        )
 
     def migrate(self, *, operational_only: bool = False) -> None:
         migration_dir = files("safety_zone_monitor").joinpath("migrations")
@@ -618,6 +622,25 @@ class Repository:
                     (sequence_name, max_value),
                 )
 
+    def _operational_columns(
+        self,
+        connection: psycopg.Connection,
+        table_name: str,
+    ) -> tuple[str, ...]:
+        schema_name, relation_name = table_name.split(".", 1)
+        return tuple(
+            row[0]
+            for row in connection.execute(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = %s AND table_name = %s
+                ORDER BY ordinal_position
+                """,
+                (schema_name, relation_name),
+            ).fetchall()
+        )
+
     def copy_operational_data_from(
         self,
         source_database_url: str,
@@ -649,11 +672,26 @@ class Repository:
             if replace_target:
                 self.reset_operational_data(target_connection)
             for table_name in OPERATIONAL_TABLE_NAMES:
-                copy_to = sql.SQL("COPY {} TO STDOUT").format(
-                    qualified_identifier(table_name)
+                target_columns = self._operational_columns(target_connection, table_name)
+                source_columns = set(self._operational_columns(source_connection, table_name))
+                missing_columns = [
+                    column for column in target_columns if column not in source_columns
+                ]
+                if missing_columns:
+                    raise RuntimeError(
+                        f"Source table {table_name} is missing column(s): "
+                        + ", ".join(missing_columns)
+                    )
+                column_identifiers = sql.SQL(", ").join(
+                    sql.Identifier(column) for column in target_columns
                 )
-                copy_from = sql.SQL("COPY {} FROM STDIN").format(
-                    qualified_identifier(table_name)
+                copy_to = sql.SQL("COPY (SELECT {} FROM {}) TO STDOUT").format(
+                    column_identifiers,
+                    qualified_identifier(table_name),
+                )
+                copy_from = sql.SQL("COPY {} ({}) FROM STDIN").format(
+                    qualified_identifier(table_name),
+                    column_identifiers,
                 )
                 with ExitStack() as stack:
                     source_cursor = stack.enter_context(source_connection.cursor())
