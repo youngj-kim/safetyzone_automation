@@ -219,7 +219,6 @@ Roadview 확인을 사용할 수 있습니다. 모바일에서는 하단 현황�
 
 - [문서 허브](docs/document_hub.md)
 - [MVP 프로젝트 상태](docs/mvp_project_status.md)
-- [1번방 커밋/배포 인수인계](docs/automation_room_handoff.md)
 - [DB 테이블 이해 가이드](docs/database_table_guide.md)
 - [표준노드링크 DB 의존성 계약](docs/standard_node_link_db_contract.md)
 - [NGII 도로중심선 PostGIS 등록 및 서울 검증 절차](docs/ngii_road_centerline_postgis.md)
