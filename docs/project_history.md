@@ -118,3 +118,19 @@
 결정사항: 변경 이벤트는 단순 유형뿐 아니라 검수에 필요한 세부 근거를 함께 보여준다.
 이유: 운영자는 `속성변경`, `도형변경`이라는 추상 분류보다 어떤 필드가 바뀌었고 면적이 얼마나 달라졌는지가 필요하다.
 다음 작업: 도형변경 정보가 실제 검수 우선순위 산정에 충분한지 확인하고, 필요하면 면적 임계값과 경미 변경 기준을 조정한다.
+
+## 2026-07-31
+
+- 보호구역 운영 DB를 로컬 PostGIS subset에서 Supabase 운영 DB로 이관했다.
+- GitHub-hosted runner에서 `chunk_01` 일반 변경감지를 실행해 Supabase 쓰기, 품질검사, 모니터링 이력 갱신이 성공하는지 확인했다.
+- GitHub Actions의 09:00 KST schedule은 계속 비활성 상태로 두고, `workflow_dispatch` 수동 실행만 유지했다.
+- `prepare_db=false`를 기본값으로 두고, Supabase 운영 DB 준비 migration은 필요할 때만 수동으로 실행하도록 분리했다.
+- cloud 모드 일반 수집에서는 migration을 반복 실행하지 않고 `audit-ops-db`로 운영 DB 계약만 확인하도록 조정했다.
+- Supabase pooler에서 read-only 세션 상태가 남는 문제를 피하기 위해 DB 연결 직후 `default_transaction_read_only=off`로 초기화하도록 보정했다.
+- 변경이 없는 성공 실행 또는 실패 실행에서는 전체 dashboard export 대신 `dashboard/data/overview.json`만 갱신하도록 경량화했다.
+- `chunk_01` 일반 변경감지 최종 run은 `Run daily monitor`, `quality-report`, `Export monitoring history`, `Commit monitoring history`가 모두 성공했다.
+- GitHub Pages 수동 배포까지 완료해 최신 모니터링 이력이 `safetyzone.yjkim.dev`에 반영되도록 했다.
+
+결정사항: 보호구역 API 수집, 변경 감지, 모니터링 이력, 정적 대시보드만 Supabase + GitHub Actions + GitHub Pages로 온라인 운영한다.
+이유: 취업 이후 개인 PC를 계속 켜둘 수 없고, 표준노드링크/NGII/매칭 검수 DB는 대용량 로컬 분석 자산이라 온라인 운영 범위에 넣지 않는 편이 비용과 유지보수 측면에서 안전하다.
+다음 작업: 남은 전국 청크를 같은 방식으로 수동 검증하고, 충분히 안정화되면 09:00 KST schedule 재활성화 여부를 결정한다.

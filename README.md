@@ -199,17 +199,19 @@ Roadview 확인을 사용할 수 있습니다. 모바일에서는 하단 현황�
 
 ## GitHub Actions
 
-기존 DB가 `localhost:5433`이므로 GitHub 호스팅 러너에서는 접근할 수 없습니다. 워크플로는
-DB가 실행되는 Windows 호스트에 설치한 **self-hosted runner**를 사용하도록 구성했습니다.
+보호구역 API 수집과 대시보드용 운영 DB는 Supabase PostgreSQL/PostGIS로 전환하고,
+워크플로는 GitHub-hosted runner(`ubuntu-latest`)에서 수동 실행하도록 구성했습니다.
+표준노드링크, NGII, 매칭 검수 DB는 기존 로컬 PostGIS 운영 범위로 남깁니다.
 
 - Secrets: `OPEN_API_SERVICE_KEY`, `DATABASE_URL`
 - Repository variable: 기본은 `SGG_CODES_FILE=config/sgg_codes_nationwide.txt`
 - 청크 수동 실행 입력값: `sgg_codes_file=config/sgg_chunks/nationwide_chunk_01.txt` 등
+- 수동 실행 입력값: 일반 운영은 `prepare_db=false`, 초기 DB 준비가 필요할 때만 `prepare_db=true`
 - 선택 Secrets: `SLACK_WEBHOOK_URL` 또는 `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
 - Pages 선택 Secret: `KAKAO_JS_KEY`
 
-Supabase 온라인 운영 전환 전까지 예약 수집은 중단하고, 필요한 경우 `workflow_dispatch`로만
-수동 실행합니다. 온라인 운영 전환 후 GitHub-hosted runner 기반 정기 실행으로 다시 설정합니다.
+2026-07-31 기준 `chunk_01` 일반 변경감지는 Supabase에서 성공했습니다. 예약 수집은 아직 중단하고,
+남은 청크를 수동 검증한 뒤 GitHub-hosted runner 기반 09:00 KST schedule 재활성화 여부를 결정합니다.
 표준노드링크 매칭은 다음 마일스톤에서 `mobility.std_link.geom`을 대상으로 증분 구현합니다.
 
 ## 추가 문서

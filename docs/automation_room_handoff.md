@@ -191,9 +191,12 @@ Dashboard update policy:
 
 - `daily-monitor.yml` currently keeps only `workflow_dispatch` manual runs while Supabase online operations are prepared; the former 09:00 KST schedule is disabled.
 - Manual monitor runs write `run_summary.json` from `python -m safety_zone_monitor run --summary-json run_summary.json`.
+- `prepare_db=false` is the normal run mode. `init-ops-db` runs only when the manual `prepare_db=true` input is selected.
+- In cloud mode, the pipeline audits the Supabase operational contract instead of rerunning migrations on every monitor run.
+- Supabase pooler connections are reset with `default_transaction_read_only=off` on connect to avoid inherited read-only session state.
 - When a successful run has `has_changes=true`, the workflow exports and commits the full `dashboard/data` set for change lists, current objects, and map layers.
 - Failed runs and quality-check failures do not update change data or current-object map data.
-- Monitoring history is still published for operator visibility: no-change and failed runs export/commit only `dashboard/data/overview.json`, so GitHub Pages shows the latest success/failure status and failure reason.
+- Monitoring history is still published for operator visibility: no-change and failed runs export/commit only `dashboard/data/overview.json` through `export-dashboard --overview-only`, so GitHub Pages shows the latest success/failure status and failure reason without heavy GeoJSON export.
 - The 2026-07-28 Incheon `NEW` surge for `28125`, `28155`, `28275`, and `28290` is treated as an administrative-district reorganization adjustment, not ordinary new safety-zone creation.
 - Dashboard export excludes those `NEW` events from recent-change lists and sido new counts, while preserving the source DB events and writing the reason to `dashboard/data/change_exclusions.json`.
 
@@ -226,13 +229,15 @@ Kakao 설정 확인:
 - GitHub Actions 수동 실행 시 `sgg_codes_file` 입력값으로 청크 파일 경로를 지정하면 해당 범위만 실행합니다.
 - 전국 기준선 DB 등록은 2026-07-25 실행에서 성공했습니다.
 - 2026-07-26 실행도 전국 249개 시군구 기준으로 성공했으며 변경 건수는 0건입니다.
+- 2026-07-31에는 로컬 운영 DB subset을 Supabase로 이관한 뒤 `chunk_01` 일반 변경감지 run이 성공했습니다. `Run daily monitor`, `quality-report`, `Export monitoring history`, `Commit monitoring history`가 모두 성공했고, GitHub Pages 수동 배포도 성공했습니다.
 - 대시보드 export는 `--baseline-date 2026-07-25`를 사용합니다. 전국 기준선 등록일의 대량 `NEW` 이벤트는 최근 변경 목록에서 제외하고 현재 객체로만 표시합니다.
 
 ## 남은 작업
 
-- `dashboard/data` 갱신분을 커밋하고 GitHub Pages에 배포합니다.
+- `chunk_02`부터 `chunk_06`까지 Supabase 일반 변경감지를 순차 검증합니다.
+- 실제 변경이 발생한 성공 run에서 전체 `dashboard/data` 갱신분이 커밋되고 GitHub Pages에 배포되는지 확인합니다.
 - 이후 일일 수집 성공 여부와 변경 건수는 대시보드 `모니터링 이력`에서 확인합니다.
-- Kakao 지도/Roadview 배포 후 실제 도메인에서 SDK 로드와 로드뷰 조회를 확인합니다.
+- 남은 청크 검증 후 09:00 KST schedule 재활성화 여부를 결정합니다.
 
 ## 1번방 작업 순서
 

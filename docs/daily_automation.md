@@ -1,21 +1,17 @@
 # 보호구역 수동 실행 및 자동실행 전환 준비
 
-워크플로 파일은 `.github/workflows/daily-monitor.yml`이다. Supabase 온라인 운영 전환 전까지
-예약 수집은 중단하고 `workflow_dispatch` 수동 실행만 유지한다. 기존 GitHub 예약 시간은 UTC
-기준 `0 0 * * *`, 한국시간 09:00이었으나 현재 workflow에서는 제거되어 있다.
+워크플로 파일은 `.github/workflows/daily-monitor.yml`이다. Supabase 온라인 운영 전환 검증은
+진행 중이며, 예약 수집은 아직 중단하고 `workflow_dispatch` 수동 실행만 유지한다. 기존 GitHub
+예약 시간은 UTC 기준 `0 0 * * *`, 한국시간 09:00이었으나 현재 workflow에서는 제거되어 있다.
 
 ## 실행 환경
 
-기존 PostGIS가 사용자 PC의 `localhost:5433`에 있으므로 GitHub 공용 서버에서는 접근할
-수 없다. 다음 조건을 갖춘 Windows self-hosted runner를 사용한다.
+현재 보호구역 API 수집과 대시보드용 운영 DB는 Supabase Free PostgreSQL/PostGIS로 전환한다.
+GitHub-hosted runner(`ubuntu-latest`)가 Supabase에 접속해 수집, 변경감지, 품질검사, 대시보드
+export를 실행한다.
 
-- 라벨: `self-hosted`, `windows`, `x64`
-- 매일 09:00에 PC가 켜져 있음
-- GitHub Actions Runner 서비스가 실행 중
-- Docker Desktop과 `mobility_postgis` 컨테이너가 실행 중
-- Python 3.11 이상이 self-hosted PC의 PATH에 등록되어 있음
-- Windows 시간이 정상 동기화되어 있음. 시간이 어긋나면 GitHub 연결에서
-  `certificate chain: NotTimeValid` SSL 오류가 날 수 있다.
+로컬 PostGIS와 Windows self-hosted runner는 표준노드링크, NGII, 매칭 검수 작업에는 계속 사용할
+수 있지만, 보호구역 일일 수집 운영의 기본 실행 위치에서는 제외한다.
 
 ## GitHub 저장소 설정
 
@@ -105,20 +101,25 @@ GitHub Actions 로그에서 이 유형을 먼저 확인한다.
 | `TIMEOUT` | 요청 제한 시간 초과 | API 상태 확인 후 재실행. 반복되면 timeout/청크 크기 조정 |
 | `NETWORK_ERROR` | DNS, 연결 실패, 네트워크 단절 | runner PC 네트워크와 공공 API 접속 확인 |
 | `SERVER_ERROR` | 공공 API 5xx 응답 | API 서버 장애 가능성이 높으므로 시간을 두고 재실행 |
+| `DB_READ_ONLY` | Supabase pooler 또는 DB가 읽기 전용 세션으로 응답 | `DATABASE_URL`이 Session pooler `:5432`인지 확인하고, DB 용량/쓰기 권한을 점검 |
+| `DB_DISK_FULL` | Supabase 임시 디스크 또는 DB 용량 부족 | 전체 dashboard export를 피하고, 무변경/실패 이력은 `overview.json` 경량 export만 사용 |
 
 ## 실행 순서
 
 1. 저장소 체크아웃
-2. self-hosted PC의 Python 버전 확인 및 패키지 설치
-3. 기존 `mobility_db`와 표준노드링크 객체 확인
-4. 보호구역 수집·정규화·변경감지·저장·알림
-5. 중복·도형·시군구 범위 품질검사
+2. GitHub-hosted runner에서 Python 3.11 설정 및 패키지 설치
+3. `prepare_db=true`일 때만 Supabase 운영 DB migration 실행
+4. `audit-ops-db`로 Supabase 운영 DB 계약 확인
+5. 보호구역 수집·정규화·변경감지·저장·알림
+6. 중복·도형·시군구 범위 품질검사
+7. 변경이 있으면 전체 `dashboard/data` export, 변경이 없거나 실패 이력만 필요하면 `overview.json`만 export
 
 ## 운영 전 수동 확인
 
 GitHub Actions의 `Daily safety-zone monitor`에서 `Run workflow`를 눌러 한 번 실행한다.
-모든 단계가 초록색인지 확인하고 다음 날 예약 실행 이력을 확인한다. 예약 실행은 PC,
-Runner 서비스 또는 Docker가 꺼져 있으면 정상 완료될 수 없다.
+모든 단계가 초록색인지 확인한다. 2026-07-31 기준 `chunk_01`은 Supabase 운영 DB에서 일반
+변경감지, 품질검사, 모니터링 이력 갱신까지 성공했다. 남은 청크도 같은 방식으로 검증한 뒤
+09:00 KST schedule 재활성화 여부를 결정한다.
 
 ## Windows 시간 동기화 점검
 

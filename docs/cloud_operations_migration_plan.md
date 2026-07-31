@@ -237,12 +237,22 @@ workflow에는 `SAFETYZONE_DB_MODE=cloud`가 고정되어 있으므로 GitHub va
 
 ## 8. 남은 결정/확인 사항
 
-- Supabase project region
-- Supabase 연결 문자열 종류: direct connection 또는 pooler
-- 운영 migration을 기존 폴더에서 필터링할지, 별도 폴더로 분리할지
-- 초기 데이터 이관 방식: 로컬 DB 운영 subset 복사 후 chunk 단위 비교 검증
-- 최초 전국 운영 반영 방식: 한 번에 실행할지, chunk별 수동 실행 후 schedule 전환할지
-- self-hosted runner 제거 시점: Supabase hosted workflow가 최소 1회 이상 정상 schedule 성공한 뒤
+2026-07-31 기준 확인된 사항:
+
+- Supabase project ref: `cqnipjvbwgkineoqnvji`
+- GitHub Actions 연결 문자열은 Supabase Session pooler `:5432`를 사용한다.
+- 보호구역 운영 migration은 필요 시 `prepare_db=true` 수동 입력에서만 실행한다.
+- 일반 cloud 수집은 migration을 반복하지 않고 `audit-ops-db`로 운영 DB 계약만 확인한다.
+- 초기 운영 기준선은 로컬 운영 DB subset을 Supabase로 복사하는 방식으로 확정했다.
+- `chunk_01` 일반 변경감지는 Supabase에서 성공했고, `NEW` 폭증 없이 품질검사까지 통과했다.
+- 변경 없음/실패 이력 갱신은 전체 dashboard export가 아니라 `overview.json` 경량 export만 사용한다.
+
+남은 사항:
+
+- `chunk_02`~`chunk_06` 일반 변경감지 검증
+- 충분히 안정화된 뒤 09:00 KST schedule 재활성화 여부 결정
+- Supabase Free 용량과 백업 정책 확인
+- self-hosted runner 제거 또는 보관 시점 결정
 
 ## 9. 로컬 운영 DB에서 Supabase로 기준선 이관
 
@@ -289,6 +299,21 @@ $env:SOURCE_DATABASE_URL="로컬 mobility_db 연결 문자열"
 ```
 
 이관 검증 후에는 GitHub Actions에서 이미 성공한 chunk 하나를 일반 변경감지 모드로 다시 실행한다. 정상 기준은 `NEW` 폭증이 아니라 기존 기준선과 비교된 `UNCHANGED` 중심 결과다.
+
+2026-07-31에 `chunk_01` 일반 변경감지 검증을 완료했다.
+
+- workflow run: `30598053853`
+- `Run daily monitor`: success
+- `quality-report`: success
+- `Check detected changes`: success
+- `Export monitoring history`: success
+- `Commit monitoring history`: success
+- GitHub Pages 수동 배포: success
+
+검증 중 확인된 운영 보정:
+
+- Supabase pooler 연결에서 read-only 세션 상태가 남을 수 있어 DB 연결 직후 `default_transaction_read_only=off`를 설정한다.
+- Supabase 임시 디스크 사용량을 줄이기 위해 변경 없음/실패 이력 갱신 시에는 전체 GeoJSON export를 하지 않고 `overview.json`만 갱신한다.
 
 ## 10. 구현 메모
 
