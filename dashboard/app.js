@@ -62,6 +62,7 @@ const state = {
   timelines: new Map(),
   polygonDeletedManageNos: new Set(),
   currentGroups: new Map(),
+  sggNames: {},
   changeSummaryBySido: null,
   changeExclusions: null,
   ngiiSummary: null,
@@ -72,7 +73,7 @@ const state = {
   ngiiReviewLinkFeatures: [],
   selectedChangeSido: "",
 };
-document.body.dataset.dashboardVersion = "20260728-11";
+document.body.dataset.dashboardVersion = "20260731-1";
 
 const dashboardConfig = window.SAFETYZONE_CONFIG || {};
 const queryParams = new URLSearchParams(window.location.search);
@@ -1563,7 +1564,7 @@ function popupContent(props) {
     ${type}
     ${t("type")}: ${zoneType.label}<br>
     ${t("manageNo")}: ${props.source_manage_no || "-"}<br>
-    ${t("sgg")}: ${props.sgg_code || "-"}<br>
+    ${t("sgg")}: ${sggCodeNameHtml(props.sgg_code)}<br>
     ${t("group")}: ${props.zone_group_id || "-"}<br>
     ${apiDates}
     ${geometryChange}
@@ -1592,7 +1593,7 @@ function popupContent(props) {
     ${type}
     종류: ${zoneType.label}<br>
     관리번호: ${props.source_manage_no || "-"}<br>
-    시군구: ${props.sgg_code || "-"}<br>
+    시군구: ${sggCodeNameHtml(props.sgg_code)}<br>
     그룹: ${props.zone_group_id || "-"}<br>
     ${apiDates}
     ${review}
@@ -1624,7 +1625,7 @@ function popupContent(props) {
     ${type}
     ${t("type")}: ${zoneType.label}<br>
     ${t("manageNo")}: ${props.source_manage_no || "-"}<br>
-    ${t("sgg")}: ${props.sgg_code || "-"}<br>
+    ${t("sgg")}: ${sggCodeNameHtml(props.sgg_code)}<br>
     ${t("group")}: ${props.zone_group_id || "-"}<br>
     ${apiDates}
     ${review}
@@ -1994,6 +1995,17 @@ function changeSummaryRegionName(code) {
   return summaryRegion?.sido_name || currentRegion?.sido_name || code;
 }
 
+function formatSggCodeName(code) {
+  const normalized = String(code || "").trim();
+  if (!normalized) return "-";
+  const name = state.sggNames[normalized];
+  return name ? `${normalized} (${name})` : normalized;
+}
+
+function sggCodeNameHtml(code) {
+  return escapeHtml(formatSggCodeName(code));
+}
+
 function buildFilteredChangeSummaryBySido() {
   const summary = new Map();
   state.events.filter(eventMatchesDateAndType).forEach((event) => {
@@ -2059,7 +2071,7 @@ function renderEvents() {
         </div>
         <div class="event-meta">
           <span class="zone-type" style="--zone-type-color: ${zoneType.color}">${zoneType.label}</span><br>
-          ${event.layer_type} · ${event.source_manage_no || "-"} · ${event.sgg_code || "-"}<br>
+          ${event.layer_type} · ${event.source_manage_no || "-"} · ${sggCodeNameHtml(event.sgg_code)}<br>
           ${
             enriched.review_reason
               ? `<span class="review-reason">${enriched.review_reason}</span><br>`
@@ -2128,7 +2140,7 @@ function renderCurrentItems() {
         </div>
         <div class="event-meta">
           <span class="zone-type" style="--zone-type-color: ${zoneType.color}">${zoneType.label}</span><br>
-          ${item.layer_type} · ${item.source_manage_no || "-"} · ${item.sgg_code || "-"}<br>
+          ${item.layer_type} · ${item.source_manage_no || "-"} · ${sggCodeNameHtml(item.sgg_code)}<br>
           그룹 ${item.zone_group_id || "-"}
           ${
             item.api_last_modified_on
@@ -2288,7 +2300,7 @@ function renderEvents() {
         <div class="event-meta">
           ${names.secondary ? `<span class="name-original">${escapeHtml(names.secondary)}</span><br>` : ""}
           <span class="zone-type" style="--zone-type-color: ${zoneType.color}">${zoneType.label}</span><br>
-          ${event.layer_type} · ${event.source_manage_no || "-"} · ${event.sgg_code || "-"}<br>
+          ${event.layer_type} · ${event.source_manage_no || "-"} · ${sggCodeNameHtml(event.sgg_code)}<br>
           ${
             enriched.review_reason
               ? `<span class="review-reason">${escapeHtml(enriched.review_reason)}</span><br>`
@@ -2349,7 +2361,7 @@ function renderCurrentItems() {
         <div class="event-meta">
           ${names.secondary ? `<span class="name-original">${escapeHtml(names.secondary)}</span><br>` : ""}
           <span class="zone-type" style="--zone-type-color: ${zoneType.color}">${zoneType.label}</span><br>
-          ${item.layer_type} · ${item.source_manage_no || "-"} · ${item.sgg_code || "-"}<br>
+          ${item.layer_type} · ${item.source_manage_no || "-"} · ${sggCodeNameHtml(item.sgg_code)}<br>
           ${query && item.sido_name ? `${formatSidoName(item.sido_code || item.sido_name)}<br>` : ""}
           ${t("group")} ${item.zone_group_id || "-"}
           ${
@@ -2575,7 +2587,7 @@ function ngiiPopupContent(props) {
     <span style="color: ${bucket.color}; font-weight: 700">${bucket.label}</span><br>
     ${escapeHtml(ngiiBucketReason(props.ngii_bucket))}<br>
     ${t("manageNo")}: ${props.source_manage_no || "-"}<br>
-    ${t("sgg")}: ${props.sgg_code || "-"}<br>
+    ${t("sgg")}: ${sggCodeNameHtml(props.sgg_code)}<br>
     NGII candidates: ${numberText(props.candidate_count)}<br>
     Auto-like: ${numberText(props.auto_apply_like_count)}<br>
     A: ${numberText(props.grade_a_count)} / B: ${numberText(props.grade_b_count)}<br>
@@ -2647,7 +2659,7 @@ function renderNgiiItems() {
         <div class="event-meta">
           ${names.secondary ? `<span class="name-original">${escapeHtml(names.secondary)}</span><br>` : ""}
           <span class="review-reason">${escapeHtml(ngiiBucketReason(item.ngii_bucket))}</span><br>
-          ${item.source_manage_no || "-"} · ${item.sgg_code || "-"}<br>
+          ${item.source_manage_no || "-"} · ${sggCodeNameHtml(item.sgg_code)}<br>
           후보 ${numberText(item.candidate_count)} · 20m 내 도로 ${numberText(item.nearby_count)} · 최근접 ${
             item.nearest_distance_m ?? "-"
           }m
@@ -2928,6 +2940,7 @@ async function main() {
     overview,
     events,
     currentIndex,
+    sggNames,
     changeSummaryBySido,
     changeExclusions,
     changeZones,
@@ -2941,6 +2954,7 @@ async function main() {
     loadJson("data/overview.json"),
     loadJson("data/change_events.json"),
     loadJson("data/current_index.json"),
+    loadJson("data/sgg_names.json"),
     loadJson("data/change_summary_by_sido.json"),
     loadJson("data/change_exclusions.json"),
     loadJson("data/change_zones.geojson"),
@@ -2955,6 +2969,7 @@ async function main() {
   renderOverview(overview);
   state.events = events.events || [];
   state.currentIndex = currentIndex;
+  state.sggNames = sggNames || {};
   state.changeSummaryBySido = changeSummaryBySido;
   state.changeExclusions = changeExclusions;
   state.ngiiSummary = ngiiSummary;
