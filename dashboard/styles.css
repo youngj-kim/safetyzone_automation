@@ -729,6 +729,46 @@ input[type="checkbox"] {
   font-weight: 700;
 }
 
+.changed-field-details {
+  margin: 8px 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8faf9;
+  font-size: 12px;
+}
+
+.changed-field-details > strong {
+  display: block;
+  margin-bottom: 5px;
+}
+
+.changed-field-details ol {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.changed-field-details li {
+  color: var(--text);
+}
+
+.changed-field-details li strong,
+.changed-field-details li span {
+  display: block;
+}
+
+.changed-field-details li span {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.changed-field-more {
+  color: var(--muted);
+  font-weight: 700;
+}
+
 .popup-timeline {
   margin: 8px 0;
   padding: 8px 0 0;

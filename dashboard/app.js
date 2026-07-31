@@ -73,7 +73,7 @@ const state = {
   ngiiReviewLinkFeatures: [],
   selectedChangeSido: "",
 };
-document.body.dataset.dashboardVersion = "20260731-1";
+document.body.dataset.dashboardVersion = "20260731-2";
 
 const dashboardConfig = window.SAFETYZONE_CONFIG || {};
 const queryParams = new URLSearchParams(window.location.search);
@@ -635,10 +635,41 @@ function changedFieldsSummary(props, limit = 3) {
   return visible.join(" · ");
 }
 
+function changedFieldsDetailHtml(props, limit = 6) {
+  const fields = props.changed_fields || [];
+  if (!fields.length) return "";
+  const label = state.language === "en" ? "Change Details" : "변경 세부";
+  const previousLabel = state.language === "en" ? "Before" : "이전";
+  const currentLabel = state.language === "en" ? "After" : "현재";
+  const rows = fields.slice(0, limit).map((change) => {
+    const fieldLabel = escapeHtml(changedFieldLabel(change));
+    const oldValue = escapeHtml(changedFieldValue(change.old));
+    const newValue = escapeHtml(changedFieldValue(change.new));
+    return `
+      <li>
+        <strong>${fieldLabel}</strong>
+        <span>${previousLabel}: ${oldValue}</span>
+        <span>${currentLabel}: ${newValue}</span>
+      </li>`;
+  });
+  if (fields.length > limit) {
+    rows.push(
+      `<li class="changed-field-more">${
+        state.language === "en" ? `+${fields.length - limit} more` : `외 ${fields.length - limit}건`
+      }</li>`,
+    );
+  }
+  return `
+    <div class="changed-field-details">
+      <strong>${label}</strong>
+      <ol>${rows.join("")}</ol>
+    </div>`;
+}
+
 function changedFieldsHtml(props, limit = 4) {
   const summary = changedFieldsSummary(props, limit);
   if (!summary) return "";
-  const label = state.language === "en" ? "Changed Fields" : "변경 항목";
+  const label = state.language === "en" ? "Change Details" : "변경 세부";
   return `<span class="changed-fields"><b>${label}</b>: ${escapeHtml(summary)}</span><br>`;
 }
 
@@ -1552,6 +1583,7 @@ function popupContent(props) {
     : "";
   const geometryChange = geometryChangeHtml(props);
   const changedFields = changedFieldsHtml(props);
+  const changedFieldDetails = changedFieldsDetailHtml(props);
   const zoneType = zoneTypeInfo(props.facility_type_code);
   const apiDates =
     props.api_first_registered_on || props.api_last_modified_on
@@ -1569,6 +1601,7 @@ function popupContent(props) {
     ${apiDates}
     ${geometryChange}
     ${changedFields}
+    ${changedFieldDetails}
     ${review}
     ${popupTimelineContent(props)}
     ${props.detected_at ? `${t("detected")}: ${formatDate(props.detected_at)}<br>` : ""}
@@ -1582,6 +1615,7 @@ function popupContent(props) {
   const title = props.facility_name || "이름 없음";
   const type = props.change_type ? `<b>${props.change_type}</b><br>` : "";
   const review = enriched.review_reason ? `검토: ${enriched.review_reason}<br>` : "";
+  const changedFieldDetails = changedFieldsDetailHtml(props);
   const zoneType = zoneTypeInfo(props.facility_type_code);
   const apiDates =
     props.api_first_registered_on || props.api_last_modified_on
@@ -1596,6 +1630,7 @@ function popupContent(props) {
     시군구: ${sggCodeNameHtml(props.sgg_code)}<br>
     그룹: ${props.zone_group_id || "-"}<br>
     ${apiDates}
+    ${changedFieldDetails}
     ${review}
     ${popupTimelineContent(props)}
     ${props.detected_at ? `감지: ${formatDate(props.detected_at)}<br>` : ""}
@@ -1613,6 +1648,9 @@ function popupContent(props) {
   const review = enriched.review_reason
     ? `${t("reviewLabel")}: ${escapeHtml(enriched.review_reason)}<br>`
     : "";
+  const geometryChange = geometryChangeHtml(props);
+  const changedFields = changedFieldsHtml(props);
+  const changedFieldDetails = changedFieldsDetailHtml(props);
   const zoneType = zoneTypeInfo(props.facility_type_code);
   const apiDates =
     props.api_first_registered_on || props.api_last_modified_on
@@ -1628,6 +1666,9 @@ function popupContent(props) {
     ${t("sgg")}: ${sggCodeNameHtml(props.sgg_code)}<br>
     ${t("group")}: ${props.zone_group_id || "-"}<br>
     ${apiDates}
+    ${geometryChange}
+    ${changedFields}
+    ${changedFieldDetails}
     ${review}
     ${popupTimelineContent(props)}
     ${props.detected_at ? `${t("detected")}: ${formatDate(props.detected_at)}<br>` : ""}
@@ -2287,6 +2328,7 @@ function renderEvents() {
       const names = facilityNameParts(event);
       const geometrySummary = geometryChangeSummary(event);
       const fieldSummary = changedFieldsSummary(event);
+      const fieldSummaryLabel = state.language === "en" ? "Change Details" : "변경 세부";
       const item = document.createElement("li");
       item.className = "event-item";
       item.tabIndex = 0;
@@ -2312,7 +2354,11 @@ function renderEvents() {
               : ""
           }
           ${geometrySummary ? `<span class="changed-fields geometry-change-info">${escapeHtml(geometrySummary)}</span><br>` : ""}
-          ${fieldSummary ? `<span class="changed-fields">${escapeHtml(fieldSummary)}</span><br>` : ""}
+          ${
+            fieldSummary
+              ? `<span class="changed-fields"><b>${fieldSummaryLabel}</b>: ${escapeHtml(fieldSummary)}</span><br>`
+              : ""
+          }
           ${formatDate(event.detected_at)}
         </div>
       `;
