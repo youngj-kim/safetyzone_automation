@@ -61,7 +61,13 @@ def run_pipeline(settings: Settings, *, record_events: bool = True) -> RunSummar
         _verify_mobility_contract(repository)
         repository.migrate()
     else:
-        repository.migrate(operational_only=True)
+        audit = repository.audit_operational_contract()
+        missing = [name for name, exists in audit["required_objects"].items() if not exists]
+        if missing:
+            raise RuntimeError(
+                "The cloud operational database is missing required object(s): "
+                + ", ".join(missing)
+            )
     run_id = repository.create_run(settings.sgg_codes, settings.api_url)
     try:
         client = SafetyZoneApiClient(
