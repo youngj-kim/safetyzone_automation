@@ -418,11 +418,16 @@ class Repository:
         self.database_url = database_url
 
     def _connect(self) -> psycopg.Connection:
-        return psycopg.connect(
+        connection = psycopg.connect(
             self.database_url,
             connect_timeout=10,
             prepare_threshold=None,
         )
+        original_autocommit = connection.autocommit
+        connection.autocommit = True
+        connection.execute("SET default_transaction_read_only = off")
+        connection.autocommit = original_autocommit
+        return connection
 
     def migrate(self, *, operational_only: bool = False) -> None:
         migration_dir = files("safety_zone_monitor").joinpath("migrations")
