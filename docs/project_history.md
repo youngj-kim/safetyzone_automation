@@ -170,3 +170,19 @@ Next work: run the first monthly archive manually, check the dump size and resto
 Decision: July 2026 is published as `SEEDED_FROM_OPERATIONAL_HISTORY`; August 2026 onward should be created by the monthly local archive workflow.
 Reason: July already has a successful nationwide operational run, while the formal local archive process starts after this decision.
 Next work: run the first formal monthly archive on 2026-08-28.
+
+## 2026-08-02 Final Documentation Note
+
+- Confirmed that the daily Supabase workflow can stay within the Free tier by pruning raw/snapshot payloads after successful runs.
+- Verified the Supabase operational DB size after pruning and compaction: about 164 MB.
+- Established the long-term split:
+  - Supabase: current objects, change events, monitoring history, notification logs.
+  - Local monthly archive: full raw API snapshots and PostgreSQL dump files.
+- Added and deployed a public monthly statistics page at `https://safetyzone.yjkim.dev/monthly.html`.
+- Seeded July 2026 monthly statistics from operational history because the formal monthly archive process did not exist yet in July.
+- Fixed the monthly archive schedule policy to the 28th day of each month at 11:00 KST.
+- Added `.codex-remote-attachments/` to `.gitignore` so Codex temporary attachment cache folders do not appear in git status.
+
+Decision: keep the online service small and operational, and move evidence-grade raw snapshot retention to local monthly archives.
+Reason: this avoids Supabase Free storage pressure while preserving enough local evidence to reproduce monthly source-data states.
+Next work: create the local `safetyzone_archive` database, run the first formal monthly archive on 2026-08-28, and commit only the updated `dashboard/data/monthly_archives.json`.
