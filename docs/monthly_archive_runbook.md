@@ -64,6 +64,15 @@ Expected files:
 - `README.md`
 - `archive.log`
 
+The script also updates the public aggregate index:
+
+```text
+dashboard/data/monthly_archives.json
+```
+
+This file contains counts and run metadata only. It does not include raw API payloads or database
+credentials.
+
 `exports/` is ignored by git and should remain local.
 
 ## What The Script Does
@@ -75,6 +84,7 @@ Expected files:
 5. Writes `summary.json`.
 6. Dumps local `ops`, `raw`, and `analysis` schemas with `pg_dump --format=custom`.
 7. Writes a small README beside the dump.
+8. Updates `dashboard/data/monthly_archives.json` for the monthly stats page.
 
 The script sets `SAFETYZONE_DB_MODE=cloud` internally because the archive database contains
 only the protection-zone operational subset, not the local standard-node/NGII road network.
@@ -125,3 +135,15 @@ rerun the next day with the same `ArchiveMonth` and `-ReplaceArchiveData`.
 
 If `pg_dump` fails, keep the local archive DB as-is and rerun only after checking disk space and
 PostgreSQL client availability.
+
+## Dashboard Publication
+
+The monthly stats page is:
+
+```text
+dashboard/monthly.html
+```
+
+After a successful monthly archive, commit and push `dashboard/data/monthly_archives.json` so
+GitHub Pages can show the new monthly statistics. The raw dump remains under `exports/` and is not
+committed.

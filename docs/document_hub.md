@@ -181,5 +181,6 @@ Monthly raw archive documents and scripts:
 - `docs/monthly_archive_runbook.md`: manual run, restore check, and Windows Task Scheduler setup.
 - `scripts/archive_monthly_snapshot.ps1`: monthly local raw snapshot collection and dump.
 - `scripts/register_monthly_archive_task.ps1`: optional monthly scheduled-task registration.
+- `dashboard/monthly.html`: public monthly archive statistics page linked from the main dashboard.
 
 Use this route when the goal is to preserve full nationwide raw API snapshots outside Supabase.

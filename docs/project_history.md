@@ -156,6 +156,7 @@
 - Added `scripts/register_monthly_archive_task.ps1` for optional Windows Task Scheduler registration after manual archive runs are stable.
 - Added `docs/monthly_archive_runbook.md` with manual execution, restore check, and scheduling procedure.
 - Added `MONTHLY_ARCHIVE_DATABASE_URL` to `.env.example` so the local archive DB is kept separate from the daily Supabase `DATABASE_URL`.
+- Added `dashboard/monthly.html` and `dashboard/data/monthly_archives.json` so monthly archive summaries can be published through GitHub Pages without exposing raw snapshots.
 
 Decision: monthly full raw snapshots are collected into a separate local DB such as `safetyzone_archive`, then exported to `exports/monthly_raw_archive/YYYY-MM/`.
 Reason: Supabase should remain a lightweight operational DB, while full raw evidence is preserved locally without storage pressure.

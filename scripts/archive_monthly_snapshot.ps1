@@ -4,7 +4,9 @@ param(
     [string]$ServiceKey = $env:OPEN_API_SERVICE_KEY,
     [string]$SggCodesFile = "config/sgg_codes_nationwide.txt",
     [string]$OutputRoot = "exports\monthly_raw_archive",
+    [string]$DashboardMonthlyData = "dashboard\data\monthly_archives.json",
     [switch]$ReplaceArchiveData,
+    [switch]$SkipDashboardDataUpdate,
     [switch]$AllowRemoteDatabase
 )
 
@@ -186,6 +188,40 @@ pg_restore --dbname=safetyzone_archive_restore --clean --if-exists safetyzone_ra
 ````
 "@
     Set-Content -Path $readmePath -Value $readme -Encoding UTF8
+
+    if (-not $SkipDashboardDataUpdate) {
+        $dashboardDataPath = Join-Path (Get-Location) $DashboardMonthlyData
+        $dashboardDataDir = Split-Path $dashboardDataPath -Parent
+        New-Item -ItemType Directory -Force -Path $dashboardDataDir | Out-Null
+        if (Test-Path $dashboardDataPath) {
+            $monthlyData = Get-Content $dashboardDataPath -Raw | ConvertFrom-Json
+        } else {
+            $monthlyData = [pscustomobject]@{
+                generated_at = $null
+                archives = @()
+            }
+        }
+
+        $archiveRecord = [pscustomobject]@{
+            month = $ArchiveMonth
+            generated_at = (Get-Date).ToUniversalTime().ToString("o")
+            run_id = $summary.run_id
+            fetched_count = [int]$summary.fetched_count
+            polygon_count = [int]$summary.polygon_count
+            facility_point_count = [int]$summary.facility_point_count
+            status = "ARCHIVED"
+        }
+
+        $archives = @($monthlyData.archives | Where-Object { $_.month -ne $ArchiveMonth })
+        $archives += $archiveRecord
+        $monthlyData = [pscustomobject]@{
+            generated_at = (Get-Date).ToUniversalTime().ToString("o")
+            archives = @($archives | Sort-Object month -Descending)
+        }
+        $monthlyData |
+            ConvertTo-Json -Depth 8 |
+            Set-Content -Path $dashboardDataPath -Encoding UTF8
+    }
 
     Write-Host ""
     Write-Host "Monthly archive completed."

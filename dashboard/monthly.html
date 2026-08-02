@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Safety Zone Monthly Stats</title>
+    <link rel="stylesheet" href="styles.css?v=20260802-1" />
+  </head>
+  <body class="monthly-page">
+    <main class="monthly-shell">
+      <header class="monthly-header">
+        <div>
+          <p class="eyebrow">Safety Zone Monitor</p>
+          <h1>월별 원본 아카이브 통계</h1>
+          <p id="monthly-updated" class="muted">월별 통계를 불러오는 중</p>
+        </div>
+        <a class="dashboard-link" href="./">대시보드</a>
+      </header>
+
+      <section class="monthly-metrics" aria-label="월별 아카이브 요약">
+        <article class="metric">
+          <span class="metric-label">아카이브 월</span>
+          <strong id="archive-month-count">0</strong>
+        </article>
+        <article class="metric">
+          <span class="metric-label">최근 Polygon</span>
+          <strong id="latest-polygon-count">0</strong>
+        </article>
+        <article class="metric">
+          <span class="metric-label">최근 Point</span>
+          <strong id="latest-point-count">0</strong>
+        </article>
+        <article class="metric">
+          <span class="metric-label">최근 원본 수집</span>
+          <strong id="latest-fetched-count">0</strong>
+        </article>
+      </section>
+
+      <section class="monthly-card" aria-label="월별 추이">
+        <div class="monthly-card-header">
+          <h2>월별 추이</h2>
+          <select id="monthly-metric">
+            <option value="polygon_count">Polygon</option>
+            <option value="facility_point_count">Point</option>
+            <option value="fetched_count">원본 수집</option>
+          </select>
+        </div>
+        <div id="monthly-chart" class="monthly-chart"></div>
+      </section>
+
+      <section class="monthly-card" aria-label="월별 상세">
+        <div class="monthly-card-header">
+          <h2>아카이브 상세</h2>
+          <span id="monthly-row-count" class="muted">0건</span>
+        </div>
+        <div class="monthly-table-wrap">
+          <table class="monthly-table">
+            <thead>
+              <tr>
+                <th>월</th>
+                <th>생성 시각</th>
+                <th>원본</th>
+                <th>Polygon</th>
+                <th>Point</th>
+                <th>Run ID</th>
+                <th>상태</th>
+              </tr>
+            </thead>
+            <tbody id="monthly-table-body"></tbody>
+          </table>
+        </div>
+        <p id="monthly-empty" class="monthly-empty" hidden>
+          아직 공개된 월별 아카이브 통계가 없습니다. 첫 월간 아카이브 실행 후 이 페이지에 표시됩니다.
+        </p>
+      </section>
+    </main>
+    <script src="monthly.js?v=20260802-1"></script>
+  </body>
+</html>
