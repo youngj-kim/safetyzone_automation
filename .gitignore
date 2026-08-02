@@ -12,6 +12,7 @@ build/
 htmlcov/
 .docx_review/
 .handover_review/
+.codex-remote-attachments/
 .docker-tmp/
 .actions-runner/
 .gitrepo/
