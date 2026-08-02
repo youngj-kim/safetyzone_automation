@@ -173,3 +173,13 @@ NGII 도로중심선 PostGIS 작업은 다음 순서로 본다.
 2. `README.md`의 대시보드와 지도 섹션
 3. `.github/workflows/pages.yml`
 4. `https://safetyzone.yjkim.dev`
+
+## 2026-08-02 Monthly Archive Entry
+
+Monthly raw archive documents and scripts:
+
+- `docs/monthly_archive_runbook.md`: manual run, restore check, and Windows Task Scheduler setup.
+- `scripts/archive_monthly_snapshot.ps1`: monthly local raw snapshot collection and dump.
+- `scripts/register_monthly_archive_task.ps1`: optional monthly scheduled-task registration.
+
+Use this route when the goal is to preserve full nationwide raw API snapshots outside Supabase.

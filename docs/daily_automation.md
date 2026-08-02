@@ -172,3 +172,19 @@ w32tm /resync /force
 ```
 
 동기화 후 GitHub Actions Runner 서비스를 재시작하고 workflow를 다시 수동 실행한다.
+
+## Monthly Local Raw Archive
+
+Daily online monitoring keeps Supabase light. Full raw API snapshots are archived locally once a month with:
+
+```powershell
+.\scripts\archive_monthly_snapshot.ps1 -ArchiveMonth YYYY-MM
+```
+
+After the first manual runs are stable, register the same script with Windows Task Scheduler:
+
+```powershell
+.\scripts\register_monthly_archive_task.ps1 -DayOfMonth 1 -At "11:00"
+```
+
+The archive target must be a separate local DB such as `safetyzone_archive`, configured with `MONTHLY_ARCHIVE_DATABASE_URL`. See `docs/monthly_archive_runbook.md`.

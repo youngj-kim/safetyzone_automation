@@ -149,3 +149,14 @@
 결정사항: Supabase는 current/change event/monitoring history 중심의 온라인 운영 DB로 유지하고, raw/snapshot 전체 장기 보관은 로컬 월간 아카이브로 분리한다.
 이유: Supabase Free 500MB 한도에서는 전국 raw/snapshot을 매일 누적 보관할 수 없고, 변경 감지와 대시보드 운영에는 전체 스냅샷 장기 보관이 필수는 아니다.
 다음 작업: Supabase에서 `storage-report`로 테이블별 용량을 확인하고, `prune-snapshots --dry-run` 후 정리 명령을 적용한다.
+
+## 2026-08-02 Additional Update
+
+- Added `scripts/archive_monthly_snapshot.ps1` for monthly local raw API snapshot collection.
+- Added `scripts/register_monthly_archive_task.ps1` for optional Windows Task Scheduler registration after manual archive runs are stable.
+- Added `docs/monthly_archive_runbook.md` with manual execution, restore check, and scheduling procedure.
+- Added `MONTHLY_ARCHIVE_DATABASE_URL` to `.env.example` so the local archive DB is kept separate from the daily Supabase `DATABASE_URL`.
+
+Decision: monthly full raw snapshots are collected into a separate local DB such as `safetyzone_archive`, then exported to `exports/monthly_raw_archive/YYYY-MM/`.
+Reason: Supabase should remain a lightweight operational DB, while full raw evidence is preserved locally without storage pressure.
+Next work: run the first monthly archive manually, check the dump size and restore procedure, then register the scheduled task.

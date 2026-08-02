@@ -124,3 +124,13 @@ pg_dump "$env:DATABASE_URL" `
 - 월간 로컬 아카이브 실행용 PowerShell 스크립트 작성
 - `exports/monthly_raw_archive/`를 git 추적 제외 상태로 유지
 - 첫 월간 아카이브 실행 후 파일 크기와 복원 절차 확인
+
+## 2026-08-02 Implementation Update
+
+Monthly local archive execution is now scripted.
+
+- `scripts/archive_monthly_snapshot.ps1`: collects a nationwide monthly baseline into a separate local archive DB and writes a PostgreSQL custom-format dump.
+- `scripts/register_monthly_archive_task.ps1`: registers the archive script with Windows Task Scheduler after manual runs are stable.
+- `docs/monthly_archive_runbook.md`: documents manual execution, restore checks, and scheduling.
+
+Use `MONTHLY_ARCHIVE_DATABASE_URL` for the local archive database. Keep it separate from the daily Supabase `DATABASE_URL`.
