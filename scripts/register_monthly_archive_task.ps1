@@ -2,7 +2,7 @@ param(
     [string]$TaskName = "SafetyZone Monthly Raw Archive",
     [string]$ArchiveScript = (Join-Path $PSScriptRoot "archive_monthly_snapshot.ps1"),
     [string]$ArchiveMonthArgument = "",
-    [int]$DayOfMonth = 1,
+    [int]$DayOfMonth = 28,
     [string]$At = "11:00",
     [switch]$KeepExistingArchiveData
 )

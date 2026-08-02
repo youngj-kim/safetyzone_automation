@@ -184,7 +184,7 @@ Daily online monitoring keeps Supabase light. Full raw API snapshots are archive
 After the first manual runs are stable, register the same script with Windows Task Scheduler:
 
 ```powershell
-.\scripts\register_monthly_archive_task.ps1 -DayOfMonth 1 -At "11:00"
+.\scripts\register_monthly_archive_task.ps1 -DayOfMonth 28 -At "11:00"
 ```
 
-The archive target must be a separate local DB such as `safetyzone_archive`, configured with `MONTHLY_ARCHIVE_DATABASE_URL`. See `docs/monthly_archive_runbook.md`.
+The archive target must be a separate local DB such as `safetyzone_archive`, configured with `MONTHLY_ARCHIVE_DATABASE_URL`. The monthly schedule is fixed to the 28th day of each month at 11:00 KST. See `docs/monthly_archive_runbook.md`.

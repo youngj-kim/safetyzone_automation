@@ -1,4 +1,14 @@
 {
-  "generated_at": null,
-  "archives": []
+  "generated_at": "2026-08-02T00:00:00.000Z",
+  "archives": [
+    {
+      "month": "2026-07",
+      "generated_at": "2026-07-30T00:09:13.239385Z",
+      "run_id": "e4d5b839-cbdc-4d5b-83dd-813ed26d7e11",
+      "fetched_count": 20294,
+      "polygon_count": 15395,
+      "facility_point_count": 20294,
+      "status": "SEEDED_FROM_OPERATIONAL_HISTORY"
+    }
+  ]
 }

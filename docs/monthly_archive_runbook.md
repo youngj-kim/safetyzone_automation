@@ -105,7 +105,7 @@ Then inspect counts with `psql` or the project CLI.
 After manual runs are stable, register a monthly task:
 
 ```powershell
-.\scripts\register_monthly_archive_task.ps1 -DayOfMonth 1 -At "11:00"
+.\scripts\register_monthly_archive_task.ps1 -DayOfMonth 28 -At "11:00"
 ```
 
 The registered task passes `-ReplaceArchiveData` by default. This keeps `safetyzone_archive` as a
@@ -118,8 +118,8 @@ This creates a Windows scheduled task named:
 SafetyZone Monthly Raw Archive
 ```
 
-Recommended timing is after the daily online chunks have finished, for example the first day of
-each month at 11:00 KST.
+Recommended timing is after the daily online chunks have finished, fixed to the 28th day of each
+month at 11:00 KST.
 
 ## Operating Policy
 
@@ -147,3 +147,10 @@ dashboard/monthly.html
 After a successful monthly archive, commit and push `dashboard/data/monthly_archives.json` so
 GitHub Pages can show the new monthly statistics. The raw dump remains under `exports/` and is not
 committed.
+
+The July 2026 row is seeded from the existing operational history, not from a formal monthly dump.
+It uses the last successful nationwide July run:
+
+```text
+2026-07-30 / e4d5b839-cbdc-4d5b-83dd-813ed26d7e11
+```

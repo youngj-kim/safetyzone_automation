@@ -161,3 +161,12 @@
 Decision: monthly full raw snapshots are collected into a separate local DB such as `safetyzone_archive`, then exported to `exports/monthly_raw_archive/YYYY-MM/`.
 Reason: Supabase should remain a lightweight operational DB, while full raw evidence is preserved locally without storage pressure.
 Next work: run the first monthly archive manually, check the dump size and restore procedure, then register the scheduled task.
+
+## 2026-08-02 Monthly Stats Update
+
+- Seeded July 2026 monthly stats from the existing operational history.
+- Set the monthly archive schedule policy to the 28th day of each month at 11:00 KST.
+
+Decision: July 2026 is published as `SEEDED_FROM_OPERATIONAL_HISTORY`; August 2026 onward should be created by the monthly local archive workflow.
+Reason: July already has a successful nationwide operational run, while the formal local archive process starts after this decision.
+Next work: run the first formal monthly archive on 2026-08-28.
