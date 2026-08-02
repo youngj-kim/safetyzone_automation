@@ -590,6 +590,291 @@ class Repository:
             connection.rollback()
         return counts
 
+    def operational_storage_report(self) -> dict[str, Any]:
+        with self._connect() as connection:
+            connection.execute("SET TRANSACTION READ ONLY")
+            rows = connection.execute(
+                """
+                SELECT
+                    format('%I.%I', schemaname, relname) AS table_name,
+                    pg_total_relation_size(format('%I.%I', schemaname, relname)::regclass)
+                        AS total_bytes,
+                    pg_relation_size(format('%I.%I', schemaname, relname)::regclass)
+                        AS table_bytes,
+                    pg_indexes_size(format('%I.%I', schemaname, relname)::regclass)
+                        AS index_bytes,
+                    COALESCE(n_live_tup, 0)::bigint AS estimated_rows
+                FROM pg_stat_user_tables
+                WHERE schemaname IN ('raw', 'analysis', 'ops')
+                ORDER BY total_bytes DESC, table_name
+                """
+            ).fetchall()
+            total_bytes = connection.execute(
+                """
+                SELECT COALESCE(
+                    SUM(pg_total_relation_size(format('%I.%I', schemaname, relname)::regclass)),
+                    0
+                )
+                FROM pg_stat_user_tables
+                WHERE schemaname IN ('raw', 'analysis', 'ops')
+                """
+            ).fetchone()[0]
+            connection.rollback()
+        return {
+            "total_bytes": int(total_bytes),
+            "total_mb": round(int(total_bytes) / 1024 / 1024, 2),
+            "tables": [
+                {
+                    "table_name": row[0],
+                    "total_bytes": row[1],
+                    "total_mb": round(row[1] / 1024 / 1024, 2),
+                    "table_mb": round(row[2] / 1024 / 1024, 2),
+                    "index_mb": round(row[3] / 1024 / 1024, 2),
+                    "estimated_rows": row[4],
+                }
+                for row in rows
+            ],
+        }
+
+    def prune_snapshot_payloads(
+        self,
+        *,
+        run_id: uuid.UUID | None = None,
+        retention_days: int = 35,
+        baseline_date: str | None = DEFAULT_DASHBOARD_BASELINE_DATE,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        """Remove raw/snapshot payloads that are not needed for online operations.
+
+        Current tables, change events, pipeline run history, and notification logs are
+        intentionally preserved. Snapshot rows for changed entities are retained so
+        recent dashboard change geometry can still be exported.
+        """
+        if retention_days < 0:
+            raise ValueError("retention_days must be zero or greater")
+        with self._connect() as connection:
+            candidates = connection.execute(
+                """
+                WITH candidate_runs AS (
+                    SELECT pipeline_run_id
+                    FROM ops.pipeline_run
+                    WHERE status = 'SUCCESS'
+                      AND (
+                        (%s::uuid IS NOT NULL AND pipeline_run_id = %s::uuid)
+                        OR (
+                          %s::uuid IS NULL
+                          AND finished_at < now() - make_interval(days => %s)
+                        )
+                      )
+                )
+                SELECT pipeline_run_id::text
+                FROM candidate_runs
+                ORDER BY pipeline_run_id::text
+                """,
+                (run_id, run_id, run_id, retention_days),
+            ).fetchall()
+            candidate_run_ids = tuple(row[0] for row in candidates)
+            count_rows = connection.execute(
+                """
+                WITH candidate_runs AS (
+                    SELECT pipeline_run_id
+                    FROM ops.pipeline_run
+                    WHERE status = 'SUCCESS'
+                      AND (
+                        (%s::uuid IS NOT NULL AND pipeline_run_id = %s::uuid)
+                        OR (
+                          %s::uuid IS NULL
+                          AND finished_at < now() - make_interval(days => %s)
+                        )
+                      )
+                ),
+                removable_zone_snapshots AS (
+                    SELECT zs.run_id, zs.zone_id
+                    FROM analysis.zone_snapshot AS zs
+                    JOIN candidate_runs AS cr ON cr.pipeline_run_id = zs.run_id
+                    WHERE NOT EXISTS (
+                        SELECT 1
+                        FROM analysis.zone_change_event AS e
+                        WHERE e.zone_id = zs.zone_id
+                          AND (
+                            e.run_id = zs.run_id
+                            OR e.old_geom_hash = zs.geom_hash
+                            OR e.new_geom_hash = zs.geom_hash
+                          )
+                          AND NOT (
+                            e.change_type = 'NEW'
+                            AND %s::date IS NOT NULL
+                            AND (e.detected_at AT TIME ZONE 'Asia/Seoul')::date <= %s::date
+                          )
+                    )
+                ),
+                removable_point_snapshots AS (
+                    SELECT ps.run_id, ps.facility_id, ps.point_ordinal
+                    FROM analysis.zone_facility_point_snapshot AS ps
+                    JOIN candidate_runs AS cr ON cr.pipeline_run_id = ps.run_id
+                    WHERE NOT EXISTS (
+                        SELECT 1
+                        FROM analysis.zone_facility_point_change_event AS e
+                        WHERE e.run_id = ps.run_id
+                          AND e.facility_id = ps.facility_id
+                          AND e.point_ordinal = ps.point_ordinal
+                          AND NOT (
+                            e.change_type = 'NEW'
+                            AND %s::date IS NOT NULL
+                            AND (e.detected_at AT TIME ZONE 'Asia/Seoul')::date <= %s::date
+                          )
+                    )
+                )
+                SELECT
+                    (SELECT COUNT(*) FROM raw.police_zone_item_snapshot AS raw
+                     JOIN candidate_runs AS cr ON cr.pipeline_run_id = raw.run_id),
+                    (SELECT COUNT(*) FROM removable_zone_snapshots),
+                    (SELECT COUNT(*) FROM removable_point_snapshots)
+                """,
+                (
+                    run_id,
+                    run_id,
+                    run_id,
+                    retention_days,
+                    baseline_date,
+                    baseline_date,
+                    baseline_date,
+                    baseline_date,
+                ),
+            ).fetchone()
+            summary: dict[str, Any] = {
+                "candidate_run_count": len(candidate_run_ids),
+                "candidate_run_ids": candidate_run_ids,
+                "retention_days": retention_days,
+                "baseline_date": baseline_date,
+                "run_id": str(run_id) if run_id else None,
+                "dry_run": dry_run,
+                "raw_items": count_rows[0],
+                "zone_snapshots": count_rows[1],
+                "facility_point_snapshots": count_rows[2],
+            }
+            if dry_run:
+                connection.rollback()
+                return summary
+            delete_counts = connection.execute(
+                """
+                WITH candidate_runs AS (
+                    SELECT pipeline_run_id
+                    FROM ops.pipeline_run
+                    WHERE status = 'SUCCESS'
+                      AND (
+                        (%s::uuid IS NOT NULL AND pipeline_run_id = %s::uuid)
+                        OR (
+                          %s::uuid IS NULL
+                          AND finished_at < now() - make_interval(days => %s)
+                        )
+                      )
+                ),
+                deleted_raw AS (
+                    DELETE FROM raw.police_zone_item_snapshot AS raw
+                    USING candidate_runs AS cr
+                    WHERE raw.run_id = cr.pipeline_run_id
+                    RETURNING 1
+                ),
+                deleted_zone_snapshots AS (
+                    DELETE FROM analysis.zone_snapshot AS zs
+                    USING candidate_runs AS cr
+                    WHERE zs.run_id = cr.pipeline_run_id
+                      AND NOT EXISTS (
+                        SELECT 1
+                        FROM analysis.zone_change_event AS e
+                        WHERE e.zone_id = zs.zone_id
+                          AND (
+                            e.run_id = zs.run_id
+                            OR e.old_geom_hash = zs.geom_hash
+                            OR e.new_geom_hash = zs.geom_hash
+                          )
+                          AND NOT (
+                            e.change_type = 'NEW'
+                            AND %s::date IS NOT NULL
+                            AND (e.detected_at AT TIME ZONE 'Asia/Seoul')::date <= %s::date
+                          )
+                    )
+                    RETURNING 1
+                ),
+                deleted_point_snapshots AS (
+                    DELETE FROM analysis.zone_facility_point_snapshot AS ps
+                    USING candidate_runs AS cr
+                    WHERE ps.run_id = cr.pipeline_run_id
+                      AND NOT EXISTS (
+                        SELECT 1
+                        FROM analysis.zone_facility_point_change_event AS e
+                        WHERE e.run_id = ps.run_id
+                          AND e.facility_id = ps.facility_id
+                          AND e.point_ordinal = ps.point_ordinal
+                          AND NOT (
+                            e.change_type = 'NEW'
+                            AND %s::date IS NOT NULL
+                            AND (e.detected_at AT TIME ZONE 'Asia/Seoul')::date <= %s::date
+                          )
+                    )
+                    RETURNING 1
+                )
+                SELECT
+                    (SELECT COUNT(*) FROM deleted_raw),
+                    (SELECT COUNT(*) FROM deleted_zone_snapshots),
+                    (SELECT COUNT(*) FROM deleted_point_snapshots)
+                """,
+                (
+                    run_id,
+                    run_id,
+                    run_id,
+                    retention_days,
+                    baseline_date,
+                    baseline_date,
+                    baseline_date,
+                    baseline_date,
+                ),
+            ).fetchone()
+            summary.update(
+                {
+                    "deleted_raw_items": delete_counts[0],
+                    "deleted_zone_snapshots": delete_counts[1],
+                    "deleted_facility_point_snapshots": delete_counts[2],
+                }
+            )
+        return summary
+
+    def compact_snapshot_storage(self) -> dict[str, Any]:
+        snapshot_tables = (
+            "raw.police_zone_item_snapshot",
+            "analysis.zone_snapshot",
+            "analysis.zone_facility_point_snapshot",
+        )
+        before = {
+            table["table_name"]: table["total_bytes"]
+            for table in self.operational_storage_report()["tables"]
+            if table["table_name"] in snapshot_tables
+        }
+        with self._connect() as connection:
+            connection.autocommit = True
+            for table_name in snapshot_tables:
+                connection.execute(
+                    sql.SQL("VACUUM (FULL, ANALYZE) {}").format(
+                        qualified_identifier(table_name)
+                    )
+                )
+        after = {
+            table["table_name"]: table["total_bytes"]
+            for table in self.operational_storage_report()["tables"]
+            if table["table_name"] in snapshot_tables
+        }
+        return {
+            "tables": [
+                {
+                    "table_name": table_name,
+                    "before_mb": round(before.get(table_name, 0) / 1024 / 1024, 2),
+                    "after_mb": round(after.get(table_name, 0) / 1024 / 1024, 2),
+                }
+                for table_name in snapshot_tables
+            ]
+        }
+
     def reset_operational_data(self, connection: psycopg.Connection) -> None:
         connection.execute(
             sql.SQL("TRUNCATE TABLE {} RESTART IDENTITY CASCADE").format(

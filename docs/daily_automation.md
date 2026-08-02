@@ -113,6 +113,7 @@ GitHub Actions 로그에서 이 유형을 먼저 확인한다.
 5. 보호구역 수집·정규화·변경감지·저장·알림
 6. 중복·도형·시군구 범위 품질검사
 7. 변경이 있으면 전체 `dashboard/data` export, 변경이 없거나 실패 이력만 필요하면 `overview.json`만 export
+8. 성공 run의 raw/snapshot payload를 정리해 Supabase 용량을 줄인다
 
 ## 자동 실행 schedule
 
@@ -129,6 +130,23 @@ GitHub Actions cron은 UTC 기준이므로 한국시간 09:00~10:40에 맞춰 �
 
 수동 실행에서는 `sgg_codes_file` 입력값을 지정하면 해당 청크만 실행한다. schedule 실행에서는
 cron 문자열에 따라 workflow 내부에서 청크 파일을 자동 선택한다.
+
+## Supabase snapshot 정리
+
+Supabase Free 용량을 넘기지 않기 위해 일일 workflow는 dashboard export와 commit 이후 다음 정리를
+실행한다.
+
+```bash
+python -m safety_zone_monitor prune-snapshots --run-id "$run_id"
+python -m safety_zone_monitor prune-snapshots --retention-days "$SNAPSHOT_RETENTION_DAYS" --baseline-date 2026-07-25
+```
+
+기본 보관 기간은 35일이다. 이 정리는 current, change event, pipeline run, notification log를
+보존하고, raw item payload, 변경 없는 snapshot payload, 기준선 대량 `NEW` snapshot payload를 삭제한다. 전체 원본 스냅샷 장기 보관은
+`docs/supabase_snapshot_retention_and_monthly_archive.md`의 월간 로컬 아카이브 절차를 따른다.
+
+삭제 후 Supabase 물리 용량이 바로 줄지 않으면 수집 시간대 밖에서
+`python -m safety_zone_monitor compact-snapshots`를 수동 실행한다.
 
 ## 운영 전 수동 확인
 

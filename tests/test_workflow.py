@@ -42,6 +42,10 @@ def test_daily_workflow_uses_dispatch_and_quality_gate() -> None:
     assert "dashboard/data/overview.json" in workflow
     assert "Update dashboard monitoring history" in workflow
     assert "git add dashboard/data" in workflow
+    assert "Prune cloud snapshot payloads" in workflow
+    assert "SNAPSHOT_RETENTION_DAYS:" in workflow
+    assert 'prune-snapshots --run-id "$run_id"' in workflow
+    assert 'prune-snapshots --retention-days "$SNAPSHOT_RETENTION_DAYS"' in workflow
     assert "sgg_codes_file:" in workflow
     assert "Resolve SGG codes file" in workflow
     assert "SGG_CODES_FILE_DEFAULT:" in workflow

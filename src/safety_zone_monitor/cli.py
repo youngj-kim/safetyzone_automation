@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import os
+import uuid
 from pathlib import Path
 
 from safety_zone_monitor.config import Settings
@@ -72,6 +73,37 @@ def _parser() -> argparse.ArgumentParser:
     )
     subparsers.add_parser(
         "quality-report", help="Read-only quality checks for current safety-zone data"
+    )
+    subparsers.add_parser(
+        "storage-report", help="Report table sizes for operational monitoring schemas"
+    )
+    subparsers.add_parser(
+        "compact-snapshots",
+        help="Run VACUUM FULL on raw/snapshot payload tables after pruning",
+    )
+    prune = subparsers.add_parser(
+        "prune-snapshots",
+        help="Remove raw/snapshot payloads that are not needed for online operations",
+    )
+    prune.add_argument("--run-id", help="Specific successful run ID to prune")
+    prune.add_argument(
+        "--retention-days",
+        type=int,
+        default=35,
+        help="Prune successful run payloads older than this many days when --run-id is omitted",
+    )
+    prune.add_argument(
+        "--baseline-date",
+        default=DEFAULT_DASHBOARD_BASELINE_DATE,
+        help=(
+            "Treat NEW events detected on or before this KST date as baseline events "
+            "that do not require snapshot preservation; use an empty value to disable"
+        ),
+    )
+    prune.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print candidate row counts without deleting payload rows",
     )
     dashboard = subparsers.add_parser(
         "export-dashboard",
@@ -218,6 +250,23 @@ def main() -> None:
         print(json.dumps(report, ensure_ascii=False, indent=2))
         if report["status"] != "PASS":
             raise SystemExit(1)
+        return
+    if args.command == "storage-report":
+        print(json.dumps(repository.operational_storage_report(), ensure_ascii=False, indent=2))
+        return
+    if args.command == "compact-snapshots":
+        print(json.dumps(repository.compact_snapshot_storage(), ensure_ascii=False, indent=2))
+        return
+    if args.command == "prune-snapshots":
+        run_id = uuid.UUID(args.run_id) if args.run_id else None
+        baseline_date = args.baseline_date.strip() or None
+        summary = repository.prune_snapshot_payloads(
+            run_id=run_id,
+            retention_days=args.retention_days,
+            baseline_date=baseline_date,
+            dry_run=args.dry_run,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
         return
     if args.command == "export-dashboard":
         output = Path(args.output)

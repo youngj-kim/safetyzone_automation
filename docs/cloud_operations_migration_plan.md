@@ -247,11 +247,14 @@ workflow에는 `SAFETYZONE_DB_MODE=cloud`가 고정되어 있으므로 GitHub va
 - `chunk_01` 일반 변경감지는 Supabase에서 성공했고, `NEW` 폭증 없이 품질검사까지 통과했다.
 - 변경 없음/실패 이력 갱신은 전체 dashboard export가 아니라 `overview.json` 경량 export만 사용한다.
 - 자동 운영은 전국 단일 schedule이 아니라 09:00~10:40 KST 사이 20분 간격의 6개 청크 schedule로 전환했다.
+- Supabase는 current/change event 중심 운영 DB로 슬림화하고, raw/snapshot payload는 일일 정리 대상에 포함한다.
+- 전체 원본 스냅샷 장기 보관은 월 1회 로컬 아카이브 절차로 분리한다.
 
 남은 사항:
 
 - 다음 자동 실행일에 `chunk_01`~`chunk_06` scheduled run 순차 성공 여부 확인
-- Supabase Free 용량과 백업 정책 확인
+- Supabase Free 용량 정리 결과 확인
+- 월간 로컬 원본 아카이브 첫 실행 및 복원 절차 확인
 - self-hosted runner 제거 또는 보관 시점 결정
 
 ## 9. 로컬 운영 DB에서 Supabase로 기준선 이관
@@ -314,6 +317,7 @@ $env:SOURCE_DATABASE_URL="로컬 mobility_db 연결 문자열"
 
 - Supabase pooler 연결에서 read-only 세션 상태가 남을 수 있어 DB 연결 직후 `default_transaction_read_only=off`를 설정한다.
 - Supabase 임시 디스크 사용량을 줄이기 위해 변경 없음/실패 이력 갱신 시에는 전체 GeoJSON export를 하지 않고 `overview.json`만 갱신한다.
+- Supabase DB 크기가 Free 한도에 가까워졌으므로 `prune-snapshots`로 raw/snapshot payload를 정리하고, 장기 원본 보관은 로컬 월간 아카이브로 분리한다.
 
 ## 10. 구현 메모
 

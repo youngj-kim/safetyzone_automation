@@ -46,6 +46,7 @@ jobs:
       API_REQUEST_DELAY_SECONDS: ${{ vars.API_REQUEST_DELAY_SECONDS || '1.0' }}
       API_RATE_LIMIT_MAX_RETRIES: ${{ vars.API_RATE_LIMIT_MAX_RETRIES || '5' }}
       API_RATE_LIMIT_RETRY_SECONDS: ${{ vars.API_RATE_LIMIT_RETRY_SECONDS || '60' }}
+      SNAPSHOT_RETENTION_DAYS: ${{ vars.SNAPSHOT_RETENTION_DAYS || '35' }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -139,3 +140,9 @@ jobs:
           else
             echo No monitoring history changes to commit.
           fi
+      - name: Prune cloud snapshot payloads
+        if: ${{ always() && steps.detected_changes.outcome == 'success' && !(github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true') }}
+        run: |
+          run_id="$(python -c "import json; print(json.load(open('run_summary.json', encoding='utf-8'))['run_id'])")"
+          python -m safety_zone_monitor prune-snapshots --run-id "$run_id" --baseline-date 2026-07-25
+          python -m safety_zone_monitor prune-snapshots --retention-days "$SNAPSHOT_RETENTION_DAYS" --baseline-date 2026-07-25

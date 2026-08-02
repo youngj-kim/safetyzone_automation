@@ -135,3 +135,17 @@
 결정사항: 보호구역 API 수집, 변경 감지, 모니터링 이력, 정적 대시보드만 Supabase + GitHub Actions + GitHub Pages로 온라인 운영한다.
 이유: 취업 이후 개인 PC를 계속 켜둘 수 없고, 표준노드링크/NGII/매칭 검수 DB는 대용량 로컬 분석 자산이라 온라인 운영 범위에 넣지 않는 편이 비용과 유지보수 측면에서 안전하다.
 다음 작업: 다음 자동 실행일에 6개 scheduled run이 순차 성공하는지 확인하고, 429가 반복되면 청크 간격과 API backoff 값을 조정한다.
+
+## 2026-08-02
+
+- 09:00~10:40 KST 청크 분산 자동 실행 결과를 확인했다.
+- 6개 청크 모두 수집과 품질검사는 성공했으며, Polygon/Point 변경 건수는 모두 0건이었다.
+- 변경이 없었으므로 전체 `dashboard/data` export는 실행되지 않고, 모니터링 이력 `overview.json`만 갱신된 것이 정상 동작임을 확인했다.
+- Supabase Free DB가 500MB 기준을 초과해 raw/snapshot payload 보관 정책을 재검토했다.
+- `storage-report`와 `prune-snapshots` CLI를 추가해 테이블별 용량 확인과 snapshot payload 정리를 가능하게 했다.
+- 일일 workflow에 성공 run 이후 snapshot payload 정리 단계를 추가했다.
+- 전체 원본 스냅샷 장기 보관은 Supabase가 아니라 월 1회 로컬 아카이브에서 담당하도록 설계했다.
+
+결정사항: Supabase는 current/change event/monitoring history 중심의 온라인 운영 DB로 유지하고, raw/snapshot 전체 장기 보관은 로컬 월간 아카이브로 분리한다.
+이유: Supabase Free 500MB 한도에서는 전국 raw/snapshot을 매일 누적 보관할 수 없고, 변경 감지와 대시보드 운영에는 전체 스냅샷 장기 보관이 필수는 아니다.
+다음 작업: Supabase에서 `storage-report`로 테이블별 용량을 확인하고, `prune-snapshots --dry-run` 후 정리 명령을 적용한다.

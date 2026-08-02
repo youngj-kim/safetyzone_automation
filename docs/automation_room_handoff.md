@@ -198,6 +198,8 @@ Dashboard update policy:
 - When a successful run has `has_changes=true`, the workflow exports and commits the full `dashboard/data` set for change lists, current objects, and map layers.
 - Failed runs and quality-check failures do not update change data or current-object map data.
 - Monitoring history is still published for operator visibility: no-change and failed runs export/commit only `dashboard/data/overview.json` through `export-dashboard --overview-only`, so GitHub Pages shows the latest success/failure status and failure reason without heavy GeoJSON export.
+- Successful runs prune heavy raw/snapshot payloads after dashboard export/commit. Current rows, change events, pipeline run history, and notification logs are preserved.
+- Full raw snapshot long-term storage is handled by the monthly local archive policy in `docs/supabase_snapshot_retention_and_monthly_archive.md`.
 - The 2026-07-28 Incheon `NEW` surge for `28125`, `28155`, `28275`, and `28290` is treated as an administrative-district reorganization adjustment, not ordinary new safety-zone creation.
 - Dashboard export excludes those `NEW` events from recent-change lists and sido new counts, while preserving the source DB events and writing the reason to `dashboard/data/change_exclusions.json`.
 
