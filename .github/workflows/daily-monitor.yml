@@ -1,4 +1,4 @@
-name: Daily safety-zone monitor
+Name: Daily safety-zone monitor
 
 on:
   schedule:
@@ -87,14 +87,24 @@ jobs:
       - name: Verify operational database
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true') }}
         run: python -m safety_zone_monitor audit-ops-db
+
+      # -------------------------------------------------------------
+      # [수정] nick-fields/retry 액션을 도입하여 API 실패 시 자동 재시도
+      # -------------------------------------------------------------
       - name: Run daily monitor
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true') }}
-        run: |
-          baseline_arg=""
-          if [ "${{ inputs.baseline_load }}" = "true" ]; then
-            baseline_arg="--baseline"
-          fi
-          python -m safety_zone_monitor run $baseline_arg --summary-json run_summary.json
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 15
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: |
+            baseline_arg=""
+            if [ "${{ inputs.baseline_load }}" = "true" ]; then
+              baseline_arg="--baseline"
+            fi
+            python -m safety_zone_monitor run $baseline_arg --summary-json run_summary.json
+
       - name: Verify safety-zone data quality
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true') }}
         run: python -m safety_zone_monitor quality-report
