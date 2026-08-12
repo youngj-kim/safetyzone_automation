@@ -1,4 +1,4 @@
-Name: Daily safety-zone monitor
+name: Daily safety-zone monitor
 
 on:
   schedule:
