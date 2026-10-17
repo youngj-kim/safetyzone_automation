@@ -1677,8 +1677,12 @@ function popupContent(props) {
   `;
 }
 
+const dataVersion = Date.now().toString(36);
+
 async function loadJson(path) {
-  const response = await fetch(path);
+  const requestUrl = new URL(path, window.location.href);
+  requestUrl.searchParams.set("_refresh", dataVersion);
+  const response = await fetch(requestUrl.toString(), { cache: "no-store" });
   if (!response.ok) throw new Error(`${path} ${response.status}`);
   return response.json();
 }
