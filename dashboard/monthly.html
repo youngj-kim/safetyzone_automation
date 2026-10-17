@@ -11,7 +11,7 @@
       <header class="monthly-header">
         <div>
           <p class="eyebrow">Safety Zone Monitor</p>
-          <h1>월별 원본 아카이브 통계</h1>
+          <h1>월별 보호구역 통계</h1>
           <p id="monthly-updated" class="muted">월별 통계를 불러오는 중</p>
         </div>
         <a class="dashboard-link" href="./">대시보드</a>
@@ -19,7 +19,7 @@
 
       <section class="monthly-metrics" aria-label="월별 아카이브 요약">
         <article class="metric">
-          <span class="metric-label">아카이브 월</span>
+          <span class="metric-label">집계 월</span>
           <strong id="archive-month-count">0</strong>
         </article>
         <article class="metric">
@@ -50,7 +50,7 @@
 
       <section class="monthly-card" aria-label="월별 상세">
         <div class="monthly-card-header">
-          <h2>아카이브 상세</h2>
+          <h2>월별 수집 이력 재집계</h2>
           <span id="monthly-row-count" class="muted">0건</span>
         </div>
         <div class="monthly-table-wrap">
@@ -58,22 +58,30 @@
             <thead>
               <tr>
                 <th>월</th>
-                <th>생성 시각</th>
+                <th>실제 수집 기간 (KST)</th>
                 <th>원본</th>
                 <th>Polygon</th>
                 <th>Point</th>
-                <th>Run ID</th>
+                <th>수집 성공 / 실패</th>
+                <th>시군구 범위</th>
                 <th>상태</th>
               </tr>
             </thead>
             <tbody id="monthly-table-body"></tbody>
           </table>
         </div>
+        <p class="muted">
+          운영 DB에 남아 있는 월별 마지막 성공 청크를 중복 없이 조합한 통계입니다.
+          월말에 동시에 수집한 원본 스냅샷이나 백업 완료 건수가 아닙니다.
+          수집 실패가 있으면 일부 청크의 기준일이 월말보다 이를 수 있습니다.
+          진행 중인 월은 현재까지의 월중 집계입니다.
+          <a href="data/monthly_statistics.json">집계 근거 JSON</a>
+        </p>
         <p id="monthly-empty" class="monthly-empty" hidden>
-          아직 공개된 월별 아카이브 통계가 없습니다. 첫 월간 아카이브 실행 후 이 페이지에 표시됩니다.
+          아직 공개된 월별 수집 통계가 없습니다.
         </p>
       </section>
     </main>
-    <script src="monthly.js?v=20260802-1"></script>
+    <script src="monthly.js?v=20261017-rebuilt"></script>
   </body>
 </html>

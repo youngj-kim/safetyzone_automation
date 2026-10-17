@@ -1,4 +1,5 @@
-const MONTHLY_DATA_URL = "data/monthly_archives.json?v=20260802-1";
+const MONTHLY_DATA_URL = `data/monthly_statistics.json?_refresh=${Date.now().toString(36)}`;
+let monthlyData = null;
 
 const metricLabels = {
   fetched_count: "원본 수집",
@@ -19,13 +20,14 @@ const elements = {
   empty: document.getElementById("monthly-empty"),
 };
 
-const formatNumber = (value) => Number(value || 0).toLocaleString("ko-KR");
+const formatNumber = (value) => value == null ? "-" : Number(value).toLocaleString("ko-KR");
 
 function formatDateTime(value) {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString("ko-KR", {
+    timeZone: "Asia/Seoul",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -35,7 +37,7 @@ function formatDateTime(value) {
 }
 
 function normalizeArchives(data) {
-  return [...(data.archives || [])].sort((a, b) => String(b.month).localeCompare(String(a.month)));
+  return [...(data.months || [])].sort((a, b) => String(b.month).localeCompare(String(a.month)));
 }
 
 function renderMetrics(archives) {
@@ -58,7 +60,7 @@ function renderChart(archives) {
 
   for (const item of ordered) {
     const value = Number(item[metric] || 0);
-    const percent = Math.max(4, Math.round((value / maxValue) * 100));
+    const percent = Math.round((value / maxValue) * 100);
     const row = document.createElement("div");
     row.className = "monthly-chart-row";
     row.innerHTML = `
@@ -66,7 +68,7 @@ function renderChart(archives) {
       <span class="monthly-chart-track">
         <span class="monthly-chart-bar" style="width: ${percent}%"></span>
       </span>
-      <strong>${formatNumber(value)}</strong>
+      <strong>${formatNumber(item[metric])}</strong>
     `;
     elements.chart.appendChild(row);
   }
@@ -83,22 +85,24 @@ function renderTable(archives) {
     const row = document.createElement("tr");
     row.innerHTML = `
       <td>${item.month || "-"}</td>
-      <td>${formatDateTime(item.generated_at)}</td>
+      <td>${formatDateTime(item.observation_start)}<br>~ ${formatDateTime(item.generated_at)}</td>
       <td>${formatNumber(item.fetched_count)}</td>
       <td>${formatNumber(item.polygon_count)}</td>
       <td>${formatNumber(item.facility_point_count)}</td>
-      <td><code>${item.run_id || "-"}</code></td>
-      <td>${item.status || "ARCHIVED"}</td>
+      <td>${formatNumber(item.successful_runs)} / ${formatNumber(item.failed_runs)}</td>
+      <td>${formatNumber(item.covered_sgg_count)} / ${formatNumber(item.expected_sgg_count)}</td>
+      <td>${item.status === "MONTH_TO_DATE" ? "월중 집계" : item.status === "RECONSTRUCTED" ? "이력 재집계" : "범위 불완전"}</td>
     `;
     elements.tableBody.appendChild(row);
   }
 }
 
 function render(data) {
+  monthlyData = data;
   const archives = normalizeArchives(data);
   elements.updated.textContent = data.generated_at
     ? `최근 갱신 ${formatDateTime(data.generated_at)}`
-    : "월별 아카이브 통계 대기 중";
+    : "월별 통계 대기 중";
   renderMetrics(archives);
   renderChart(archives);
   renderTable(archives);
@@ -118,9 +122,7 @@ async function loadMonthlyStats() {
 }
 
 elements.metric.addEventListener("change", () => {
-  fetch(MONTHLY_DATA_URL, { cache: "no-store" })
-    .then((response) => response.json())
-    .then((data) => renderChart(normalizeArchives(data)));
+  if (monthlyData) renderChart(normalizeArchives(monthlyData));
 });
 
 loadMonthlyStats();

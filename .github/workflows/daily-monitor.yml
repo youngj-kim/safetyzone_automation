@@ -122,7 +122,9 @@ jobs:
           echo "full_dashboard_export=true" >> "$GITHUB_OUTPUT"
       - name: Export dashboard data
         if: ${{ steps.detected_changes.outputs.full_dashboard_export == 'true' }}
-        run: python -m safety_zone_monitor export-dashboard --output dashboard/data --event-limit 500 --baseline-date 2026-07-25
+        run: |
+          python -m safety_zone_monitor export-dashboard --output dashboard/data --event-limit 500 --baseline-date 2026-07-25
+          python scripts/export_monthly_statistics.py
       - name: Commit dashboard data
         if: ${{ steps.detected_changes.outputs.full_dashboard_export == 'true' }}
         run: |
@@ -138,13 +140,15 @@ jobs:
       - name: Export monitoring history
         id: export_monitoring_history
         if: ${{ always() && steps.detected_changes.outputs.full_dashboard_export != 'true' && !(github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true') }}
-        run: python -m safety_zone_monitor export-dashboard --output dashboard/data --overview-only
+        run: |
+          python -m safety_zone_monitor export-dashboard --output dashboard/data --overview-only
+          python scripts/export_monthly_statistics.py
       - name: Commit monitoring history
         if: ${{ always() && steps.export_monitoring_history.outcome == 'success' && steps.detected_changes.outputs.full_dashboard_export != 'true' && !(github.event_name == 'workflow_dispatch' && inputs.notification_test == 'true') }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add dashboard/data/overview.json
+          git add dashboard/data/overview.json dashboard/data/monthly_statistics.json
           if ! git diff --cached --quiet; then
             git commit -m "Update dashboard monitoring history"
             python scripts/push_dashboard.py
