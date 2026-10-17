@@ -1,14 +1,103 @@
 {
-  "generated_at": "2026-08-02T00:00:00.000Z",
+  "generated_at": "2026-10-17T13:14:35.164300+00:00",
+  "timezone": "Asia/Seoul",
+  "source": "ops.pipeline_run",
+  "definition": "월별 마지막 성공 청크를 중복 없이 조합한 수집 건수. 월말 동시 스냅샷이나 원본 백업 완료를 뜻하지 않음.",
   "archives": [
     {
+      "month": "2026-10",
+      "period_end": "2026-10-17",
+      "status": "월중 이력 재집계 (10/17~10/17)",
+      "coverage_complete": true,
+      "covered_sgg_count": 269,
+      "expected_sgg_count": 269,
+      "observation_start": "2026-10-17T04:03:20.282294+00:00",
+      "generated_at": "2026-10-17T12:32:33.232871+00:00",
+      "source_run_ids": [
+        "996df51c-bfad-4dfd-a8b6-8636866d8d97",
+        "6758c73f-affc-433e-a7a2-ca60c66db6d0",
+        "75fb971b-9e87-4d13-9682-81eb4abf505a",
+        "f4763be5-70a9-43a4-a37e-ea4a0d2c926d",
+        "f7c3a4af-dbe2-4bc0-bcf6-c47ec9be94b4",
+        "987ff294-4561-4a86-ad41-bbd00a895e7f"
+      ],
+      "fetched_count": 20473,
+      "polygon_count": 15513,
+      "facility_point_count": 20473,
+      "successful_runs": 96,
+      "failed_runs": 21,
+      "running_runs": 0,
+      "run_id": "996df51c-bfad-4dfd-a8b6-8636866d8d97 / 6758c73f-affc-433e-a7a2-ca60c66db6d0 / 75fb971b-9e87-4d13-9682-81eb4abf505a / f4763be5-70a9-43a4-a37e-ea4a0d2c926d / f7c3a4af-dbe2-4bc0-bcf6-c47ec9be94b4 / 987ff294-4561-4a86-ad41-bbd00a895e7f"
+    },
+    {
+      "month": "2026-09",
+      "period_end": "2026-09-30",
+      "status": "이력 재집계 (09/29~09/30)",
+      "coverage_complete": true,
+      "covered_sgg_count": 269,
+      "expected_sgg_count": 269,
+      "observation_start": "2026-09-29T06:12:14.082827+00:00",
+      "generated_at": "2026-09-30T07:23:26.467964+00:00",
+      "source_run_ids": [
+        "5d53cbd6-ba85-4c49-9909-db7907a7f214",
+        "52fdfed9-50ea-4e2e-be4d-74d2001b58c3",
+        "b440ee7a-8d3f-45f6-91bc-ac553cda5786",
+        "f558e694-d539-452c-a00d-edd1486e473f",
+        "45d20f59-e341-4aad-b303-904d09193191",
+        "b5ef7354-7d4b-4a96-aa6a-7ff569278913"
+      ],
+      "fetched_count": 20445,
+      "polygon_count": 15513,
+      "facility_point_count": 20445,
+      "successful_runs": 136,
+      "failed_runs": 132,
+      "running_runs": 0,
+      "run_id": "5d53cbd6-ba85-4c49-9909-db7907a7f214 / 52fdfed9-50ea-4e2e-be4d-74d2001b58c3 / b440ee7a-8d3f-45f6-91bc-ac553cda5786 / f558e694-d539-452c-a00d-edd1486e473f / 45d20f59-e341-4aad-b303-904d09193191 / b5ef7354-7d4b-4a96-aa6a-7ff569278913"
+    },
+    {
+      "month": "2026-08",
+      "period_end": "2026-08-31",
+      "status": "이력 재집계 (08/28~08/31)",
+      "coverage_complete": true,
+      "covered_sgg_count": 269,
+      "expected_sgg_count": 269,
+      "observation_start": "2026-08-28T12:38:46.971840+00:00",
+      "generated_at": "2026-08-31T07:36:59.120547+00:00",
+      "source_run_ids": [
+        "270883ba-e3f2-4c39-8865-a511493c92ca",
+        "4f638b52-b1c4-49a8-bab9-f9f5dc3f0498",
+        "0525471f-986b-488d-a428-f0358e2097d4",
+        "695c4574-1dca-412f-aab3-a612c1cb8373",
+        "cb60f4fc-26b1-4cae-813f-8e78b6e42042",
+        "7e344605-731a-4748-8d5f-d2ec8563203f"
+      ],
+      "fetched_count": 20342,
+      "polygon_count": 15460,
+      "facility_point_count": 20342,
+      "successful_runs": 104,
+      "failed_runs": 149,
+      "running_runs": 0,
+      "run_id": "270883ba-e3f2-4c39-8865-a511493c92ca / 4f638b52-b1c4-49a8-bab9-f9f5dc3f0498 / 0525471f-986b-488d-a428-f0358e2097d4 / 695c4574-1dca-412f-aab3-a612c1cb8373 / cb60f4fc-26b1-4cae-813f-8e78b6e42042 / 7e344605-731a-4748-8d5f-d2ec8563203f"
+    },
+    {
       "month": "2026-07",
-      "generated_at": "2026-07-30T00:09:13.239385Z",
-      "run_id": "e4d5b839-cbdc-4d5b-83dd-813ed26d7e11",
+      "period_end": "2026-07-31",
+      "status": "이력 재집계 (07/30~07/30)",
+      "coverage_complete": true,
+      "covered_sgg_count": 269,
+      "expected_sgg_count": 269,
+      "observation_start": "2026-07-30T00:09:13.239385+00:00",
+      "generated_at": "2026-07-30T00:09:13.239385+00:00",
+      "source_run_ids": [
+        "e4d5b839-cbdc-4d5b-83dd-813ed26d7e11"
+      ],
       "fetched_count": 20294,
       "polygon_count": 15395,
       "facility_point_count": 20294,
-      "status": "SEEDED_FROM_OPERATIONAL_HISTORY"
+      "successful_runs": 35,
+      "failed_runs": 11,
+      "running_runs": 0,
+      "run_id": "e4d5b839-cbdc-4d5b-83dd-813ed26d7e11"
     }
   ]
 }
