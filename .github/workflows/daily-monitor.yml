@@ -52,6 +52,9 @@ jobs:
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -114,11 +117,9 @@ jobs:
         run: |
           has_changes="$(python -c "import json; print(str(json.load(open('run_summary.json', encoding='utf-8'))['has_changes']).lower())")"
           echo "has_changes=${has_changes}" >> "$GITHUB_OUTPUT"
-          if [ "$has_changes" = "true" ] || [ "${{ inputs.baseline_load }}" = "true" ]; then
-            echo "full_dashboard_export=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "full_dashboard_export=false" >> "$GITHUB_OUTPUT"
-          fi
+          # Re-export after every successful quality gate: a previous push may
+          # have failed after its changes were already committed to the DB.
+          echo "full_dashboard_export=true" >> "$GITHUB_OUTPUT"
       - name: Export dashboard data
         if: ${{ steps.detected_changes.outputs.full_dashboard_export == 'true' }}
         run: python -m safety_zone_monitor export-dashboard --output dashboard/data --event-limit 500 --baseline-date 2026-07-25
@@ -130,7 +131,7 @@ jobs:
           git add dashboard/data
           if ! git diff --cached --quiet; then
             git commit -m "Update dashboard data after safety-zone changes"
-            git push
+            python scripts/push_dashboard.py
           else
             echo No dashboard data changes to commit.
           fi
@@ -146,7 +147,7 @@ jobs:
           git add dashboard/data/overview.json
           if ! git diff --cached --quiet; then
             git commit -m "Update dashboard monitoring history"
-            git push
+            python scripts/push_dashboard.py
           else
             echo No monitoring history changes to commit.
           fi

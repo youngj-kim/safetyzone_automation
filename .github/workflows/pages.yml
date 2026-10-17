@@ -2,6 +2,10 @@ name: Deploy dashboard to GitHub Pages
 
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows: ["Daily safety-zone monitor"]
+    types: [completed]
+    branches: [main]
   push:
     branches:
       - main
@@ -20,6 +24,9 @@ concurrency:
 
 jobs:
   deploy:
+    # Publish committed monitoring history even when API collection failed.
+    # Check out latest main rather than the monitor's starting SHA.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.head_repository.full_name == github.repository }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -27,6 +34,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && 'main' || github.ref }}
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
