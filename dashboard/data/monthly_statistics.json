@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-07T06:51:43.817398+00:00",
+  "generated_at": "2026-11-07T07:38:56.801025+00:00",
   "timezone": "Asia/Seoul",
   "source": "ops.pipeline_run",
   "method": "latest_non_overlapping_successful_scopes_per_month",
@@ -26,7 +26,7 @@
       "polygon_count": 15522,
       "facility_point_count": 20486,
       "successful_runs": 40,
-      "failed_runs": 0,
+      "failed_runs": 3,
       "running_runs": 0
     },
     {
