@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-07T06:37:12.295648+00:00",
+  "generated_at": "2026-11-07T06:51:43.817398+00:00",
   "timezone": "Asia/Seoul",
   "source": "ops.pipeline_run",
   "method": "latest_non_overlapping_successful_scopes_per_month",
@@ -12,20 +12,20 @@
       "coverage_complete": true,
       "covered_sgg_count": 269,
       "expected_sgg_count": 269,
-      "observation_start": "2026-11-06T07:39:17.151497+00:00",
-      "generated_at": "2026-11-07T06:35:55.930027+00:00",
+      "observation_start": "2026-11-06T07:58:32.615352+00:00",
+      "generated_at": "2026-11-07T06:49:53.338273+00:00",
       "source_run_ids": [
+        "469be1b7-a24e-4c39-879e-fd726276c746",
         "917f013c-da1c-4371-92fb-39c685910aed",
         "2223a894-faa1-4a33-a7a9-139b7160ffca",
         "97822f04-ac44-4824-9ed8-86b63dfbea2f",
         "881dfa78-a232-48a6-bdff-d7a17f129146",
-        "08d17c0f-0260-4407-8935-8be6f3b34fab",
-        "45dc91ae-d856-4308-814c-c1c4c5cb8f7b"
+        "08d17c0f-0260-4407-8935-8be6f3b34fab"
       ],
-      "fetched_count": 20487,
+      "fetched_count": 20486,
       "polygon_count": 15522,
-      "facility_point_count": 20487,
-      "successful_runs": 39,
+      "facility_point_count": 20486,
+      "successful_runs": 40,
       "failed_runs": 0,
       "running_runs": 0
     },
